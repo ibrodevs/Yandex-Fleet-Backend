@@ -32,7 +32,9 @@ def test_estimated_price_is_marked_separately():
     assert estimated
     assert exact
     assert all(item["price_label"].startswith("≈") for item in estimated)
+    assert all(item["price_calculation"] for item in estimated)
     assert all(not item["price_label"].startswith("≈") for item in exact)
+    assert all(item["price_calculation"] is None for item in exact)
 
 
 def test_price_estimator_is_deterministic():
