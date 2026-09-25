@@ -1,5 +1,7 @@
+from app.marketplace.mock import reset_mock_marketplace_orders
 from app.marketplace.pricing import estimate_price
 from app.marketplace.service import (
+    accept_marketplace_order,
     get_marketplace_order,
     get_marketplace_summary,
     list_marketplace_orders,
@@ -57,3 +59,30 @@ def test_marketplace_summary_and_details():
     assert summary["by_source"]["fasten"] >= 1
     assert order is not None
     assert order["source"] == "fasten"
+
+
+def test_accept_incoming_marketplace_order():
+    reset_mock_marketplace_orders()
+    try:
+        before = get_marketplace_order(
+            "market-2001",
+            driver_id="driver-001",
+        )
+        assert before is not None
+        assert before["status"] == "incoming"
+        assert before["can_accept"] is True
+
+        accepted = accept_marketplace_order(
+            "market-2001",
+            driver_id="driver-001",
+        )
+
+        assert accepted["status"] == "accepted"
+        assert accepted["status_title"] == "Принят"
+        assert accepted["can_accept"] is False
+        assert accepted["accepted_at"]
+
+        summary = get_marketplace_summary("driver-001")
+        assert summary["accepted_count"] >= 2
+    finally:
+        reset_mock_marketplace_orders()
