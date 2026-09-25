@@ -212,11 +212,9 @@ h1 { margin: 3px 0 2px; color: var(--ink); font-size: 24px; font-weight: 700; le
   background: var(--surface);
   color: var(--body);
   text-align: left;
-  cursor: pointer;
   transition: .14s;
 }
 .order-card:last-child { border-bottom: 0; }
-.order-card:hover { background: var(--hover); }
 .order-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; margin-bottom: 13px; }
 .order-tags { display: flex; flex-wrap: wrap; gap: 6px; }
 .pill {
@@ -254,6 +252,54 @@ h1 { margin: 3px 0 2px; color: var(--ink); font-size: 24px; font-weight: 700; le
 }
 .meta-item { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11.5px; }
 .meta-item .icon { width: 15px; height: 15px; }
+
+.order-actions {
+  display: grid;
+  grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr);
+  gap: 8px;
+  margin-top: 14px;
+}
+.btn {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 14px;
+  border-radius: 11px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: .14s ease;
+}
+.btn .icon { width: 16px; height: 16px; }
+.btn:disabled { cursor: wait; opacity: .62; }
+.btn-primary {
+  border: 1px solid var(--blue);
+  background: var(--blue);
+  color: #fff;
+  box-shadow: 0 5px 14px rgba(37,102,255,.16);
+}
+.btn-primary:hover:not(:disabled) {
+  border-color: var(--blue-hover);
+  background: var(--blue-hover);
+}
+.btn-primary:active:not(:disabled) {
+  border-color: var(--blue-press);
+  background: var(--blue-press);
+}
+.btn-secondary {
+  border: 1px solid var(--field-line);
+  background: var(--surface);
+  color: var(--body);
+}
+.btn-secondary:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--ink);
+}
+.btn-large { width: 100%; min-height: 48px; font-size: 13.5px; }
+.sheet-actions { margin-top: 16px; }
+.btn.loading .icon { animation: spin .8s linear infinite; }
 
 .info-note {
   display: flex;
@@ -409,6 +455,7 @@ h1 { margin: 3px 0 2px; color: var(--ink); font-size: 24px; font-weight: 700; le
   .metric-card { padding: 11px 9px; }
   .metric-card strong { font-size: 15.5px; }
   .filter-row { grid-template-columns: 1fr; }
+  .order-actions { grid-template-columns: 1fr; }
   .order-head { gap: 8px; }
   .order-price { font-size: 18px; }
 }
