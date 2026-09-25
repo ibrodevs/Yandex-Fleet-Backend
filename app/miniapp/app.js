@@ -31,7 +31,8 @@
   }
 
   function statusPillClass(status) {
-    if (status === "accepted" || status === "completed") return "pill-success";
+    if (status === "active") return "pill-info";
+    if (status === "completed") return "pill-success";
     if (status === "incoming" || status === "waiting") return "pill-warning";
     if (status === "cancelled") return "pill-neutral";
     return "pill-info";
@@ -58,7 +59,7 @@
     const summary = state.data.summary;
     $("incomingCount").textContent = summary.incoming_count;
     $("averagePrice").textContent = money(summary.average_incoming_price);
-    $("exactCount").textContent = summary.exact_price_count;
+    $("activeCount").textContent = summary.active_count;
     $("priceDisclaimer").textContent = state.data.price_disclaimer;
   }
 
@@ -79,6 +80,14 @@
           <button class="btn btn-primary order-accept-btn" type="button" data-order-id="${escapeHtml(order.id)}">
             ${icon("check")}
             <span>Принять заказ</span>
+          </button>
+        `
+        : "";
+      const completeButton = order.can_complete
+        ? `
+          <button class="btn btn-primary order-complete-btn" type="button" data-order-id="${escapeHtml(order.id)}">
+            ${icon("check")}
+            <span>Завершить заказ</span>
           </button>
         `
         : "";
@@ -126,6 +135,7 @@
               ${icon("chevron")}
             </button>
             ${acceptButton}
+            ${completeButton}
           </div>
         </article>
       `;
@@ -138,6 +148,12 @@
     document.querySelectorAll(".order-accept-btn").forEach((button) => {
       button.addEventListener("click", async () => {
         await acceptOrder(button.dataset.orderId, button);
+      });
+    });
+
+    document.querySelectorAll(".order-complete-btn").forEach((button) => {
+      button.addEventListener("click", async () => {
+        await completeOrder(button.dataset.orderId, button);
       });
     });
   }
@@ -157,7 +173,8 @@
 
     $("statsPanel").innerHTML = [
       statRow("orders", "Новых заказов", s.incoming_count),
-      statRow("check", "Принято", s.accepted_count),
+      statRow("check", "Активных", s.active_count),
+      statRow("check", "Завершено", s.completed_count),
       statRow("trending", "Средняя входящая цена", money(s.average_incoming_price)),
       statRow("card", "Точная цена", s.exact_price_count),
       statRow("calculator", "Расчётная цена", s.estimated_price_count),
@@ -248,6 +265,8 @@
         item.id === orderId ? body.order : item
       );
       state.data.summary = body.summary;
+      state.status = "active";
+      $("statusFilter").value = "active";
 
       renderHeader();
       renderOrders();
@@ -257,6 +276,67 @@
       tg?.HapticFeedback?.notificationOccurred("success");
     } catch (error) {
       showToast(error.message || "Не удалось принять заказ");
+      tg?.HapticFeedback?.notificationOccurred("error");
+    } finally {
+      if (button?.isConnected) {
+        button.disabled = false;
+        button.classList.remove("loading");
+      }
+    }
+  }
+
+  async function confirmComplete() {
+    if (tg?.showConfirm) {
+      return await new Promise((resolve) => {
+        tg.showConfirm("Завершить этот заказ?", resolve);
+      });
+    }
+    return window.confirm("Завершить этот заказ?");
+  }
+
+  async function completeOrder(orderId, button = null) {
+    const order = state.data?.orders.find((item) => item.id === orderId);
+    if (!order || !order.can_complete) return;
+
+    const confirmed = await confirmComplete();
+    if (!confirmed) return;
+
+    if (button) {
+      button.disabled = true;
+      button.classList.add("loading");
+    }
+
+    try {
+      const { demo, headers } = apiRequestContext();
+      const response = await fetch(
+        `/api/v1/miniapp/orders/${encodeURIComponent(orderId)}/complete?demo=${demo}`,
+        {
+          method: "POST",
+          headers,
+          cache: "no-store",
+        },
+      );
+
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(body.detail || `HTTP ${response.status}`);
+      }
+
+      state.data.orders = state.data.orders.map((item) =>
+        item.id === orderId ? body.order : item
+      );
+      state.data.summary = body.summary;
+      state.status = "completed";
+      $("statusFilter").value = "completed";
+
+      renderHeader();
+      renderOrders();
+      renderStats();
+      closeSheet();
+      showToast("Заказ завершён");
+      tg?.HapticFeedback?.notificationOccurred("success");
+    } catch (error) {
+      showToast(error.message || "Не удалось завершить заказ");
       tg?.HapticFeedback?.notificationOccurred("error");
     } finally {
       if (button?.isConnected) {
@@ -301,6 +381,16 @@
         </div>
       `
       : "";
+    const completeAction = order.can_complete
+      ? `
+        <div class="sheet-actions">
+          <button class="btn btn-primary btn-large sheet-complete-btn" type="button" data-order-id="${escapeHtml(order.id)}">
+            ${icon("check")}
+            <span>Завершить заказ</span>
+          </button>
+        </div>
+      `
+      : "";
 
     $("sheetContent").innerHTML = `
       <div class="sheet-title">
@@ -335,12 +425,20 @@
 
       ${calculation}
       ${acceptAction}
+      ${completeAction}
     `;
 
     const sheetAccept = document.querySelector(".sheet-accept-btn");
     if (sheetAccept) {
       sheetAccept.addEventListener("click", async () => {
         await acceptOrder(sheetAccept.dataset.orderId, sheetAccept);
+      });
+    }
+
+    const sheetComplete = document.querySelector(".sheet-complete-btn");
+    if (sheetComplete) {
+      sheetComplete.addEventListener("click", async () => {
+        await completeOrder(sheetComplete.dataset.orderId, sheetComplete);
       });
     }
 
