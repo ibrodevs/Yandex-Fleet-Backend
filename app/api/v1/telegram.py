@@ -29,8 +29,14 @@ async def telegram_status() -> dict[str, Any]:
     ):
         try:
             runtime = await get_webhook_runtime()
+            payload["dispatcher_initialized"] = runtime._initialized
             payload["local_webhook_configured"] = runtime.state.configured
+            payload["commands_configured"] = runtime.state.commands_configured
+            payload["menu_configured"] = runtime.state.menu_configured
             payload["last_setup_error"] = runtime.state.last_error
+            payload["commands_error"] = runtime.state.commands_error
+            payload["menu_error"] = runtime.state.menu_error
+            payload["mini_app_url"] = settings.telegram_mini_app_url()
             remote = await runtime.remote_status()
             payload["telegram"] = remote
         except Exception as exc:
