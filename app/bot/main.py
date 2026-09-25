@@ -17,6 +17,7 @@ from app.bot.keyboards import (
     confirm_unlink_keyboard,
     contact_keyboard,
     main_keyboard,
+    miniapp_keyboard,
     order_keyboard,
     orders_keyboard,
 )
@@ -56,6 +57,7 @@ def build_router(
     *,
     mock_mode: bool,
     page_size: int,
+    mini_app_url: str = "",
 ) -> Router:
     router = Router()
 
@@ -327,6 +329,25 @@ def build_router(
         )
         await send_profile(message, str(driver["id"]))
 
+    @router.message(Command("app"))
+    @router.message(F.text == "🚖 Приложение")
+    async def open_mini_app(message: Message) -> None:
+        driver_id = await require_driver(message)
+        if not driver_id:
+            return
+        if not mini_app_url:
+            await message.answer(
+                "Mini App URL пока не настроен.",
+                reply_markup=main_keyboard(),
+            )
+            return
+        await message.answer(
+            "<b>🚖 Парковое приложение</b>\n\n"
+            "Внутри собраны поступающие заказы Fasten, Яндекс и Везёт, "
+            "тарифы, маршрут и цена или её примерный расчёт.",
+            reply_markup=miniapp_keyboard(mini_app_url),
+        )
+
     @router.message(Command("profile"))
     @router.message(F.text == "👤 Профиль")
     async def profile(message: Message) -> None:
@@ -570,6 +591,7 @@ async def run() -> None:
             BotCommand(command="profile", description="Профиль водителя"),
             BotCommand(command="orders", description="Заказы"),
             BotCommand(command="stats", description="Статистика"),
+            BotCommand(command="app", description="Парковое приложение"),
             BotCommand(command="unlink", description="Управление привязкой"),
         ]
     )
@@ -582,6 +604,7 @@ async def run() -> None:
             links,
             mock_mode=settings.YANDEX_MOCK_MODE,
             page_size=max(settings.TELEGRAM_BOT_ORDERS_PAGE_SIZE, 1),
+            mini_app_url=settings.telegram_mini_app_url(),
         )
     )
 
