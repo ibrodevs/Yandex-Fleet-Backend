@@ -196,5 +196,32 @@ def list_mock_marketplace_orders() -> list[dict[str, Any]]:
         item["price_label"] = (
             f"≈ {price:.0f} сом" if estimated else f"{price:.0f} сом"
         )
+        item["can_accept"] = item.get("status") == "incoming"
         result.append(item)
     return result
+
+
+def accept_mock_marketplace_order(
+    order_id: str,
+    *,
+    driver_id: str,
+) -> dict[str, Any] | None:
+    for raw in _RAW_OFFERS:
+        if raw["id"] != order_id:
+            continue
+        if raw["driver_id"] != driver_id:
+            return None
+        if raw["status"] != "incoming":
+            raise ValueError("Заказ уже недоступен для принятия.")
+
+        raw["status"] = "accepted"
+        raw["status_title"] = "Принят"
+        raw["expires_in_seconds"] = None
+        raw["accepted_at"] = datetime.now(timezone.utc).isoformat()
+
+        for item in list_mock_marketplace_orders():
+            if item["id"] == order_id:
+                item["can_accept"] = False
+                return item
+        return None
+    return None
