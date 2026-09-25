@@ -92,12 +92,27 @@ pytest -q
 SOCKET_PLACEHOLDER='${DOMAIN_SOCKET}'
 COMMAND="/home/${USERNAME}/.virtualenvs/yandex-fleet/bin/uvicorn --app-dir /home/${USERNAME}/Yandex-Fleet-Backend --env-file /home/${USERNAME}/Yandex-Fleet-Backend/.env --uds ${SOCKET_PLACEHOLDER} app.main:app"
 
-if pa website get --domain "${DOMAIN}" >/dev/null 2>&1; then
+echo "==> Checking ASGI site state"
+set +e
+WEBSITE_GET_OUTPUT="$(pa website get --domain "${DOMAIN}" 2>&1)"
+WEBSITE_GET_STATUS=$?
+set -e
+
+if [ "${WEBSITE_GET_STATUS}" -eq 0 ]; then
   echo "==> Site already exists, reloading"
   pa website reload --domain "${DOMAIN}"
-else
-  echo "==> Creating ASGI site"
+elif printf '%s' "${WEBSITE_GET_OUTPUT}" | grep -Eqi '404|not found|does not exist|no website'; then
+  echo "==> ASGI site does not exist, creating"
   pa website create --domain "${DOMAIN}" --command "${COMMAND}"
+else
+  echo "ERROR: PythonAnywhere website API is temporarily unavailable."
+  echo "${WEBSITE_GET_OUTPUT}"
+  echo
+  echo "The application and tests are OK. Do not recreate the site."
+  echo "Retry later with:"
+  echo "  pa website get --domain ${DOMAIN}"
+  echo "  pa website reload --domain ${DOMAIN}"
+  exit 6
 fi
 
 echo
