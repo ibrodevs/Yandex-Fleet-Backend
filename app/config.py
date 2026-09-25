@@ -39,6 +39,8 @@ class Settings(BaseSettings):
     TELEGRAM_BOT_TOKEN: str | None = None
     TELEGRAM_BOT_BACKEND_URL: str = "http://127.0.0.1:8000"
     TELEGRAM_BOT_REQUEST_TIMEOUT_SECONDS: float = 10.0
+    TELEGRAM_BOT_DB_PATH: str = ".data/telegram_bot.sqlite3"
+    TELEGRAM_BOT_ORDERS_PAGE_SIZE: int = 5
 
     ORDER_SYNC_INTERVAL_SECONDS: int = 10
     DRIVER_SYNC_INTERVAL_SECONDS: int = 300
