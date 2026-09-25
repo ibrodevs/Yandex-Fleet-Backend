@@ -160,7 +160,18 @@
         <div class="sheet-metric"><span>Оплата</span><strong>${order.payment_method === "cash" ? "Наличные" : "Карта"}</strong></div>
         <div class="sheet-metric"><span>Статус</span><strong>${escapeHtml(order.status_title)}</strong></div>
       </div>
-      ${order.price_is_estimated ? '<p class="disclaimer">Эта сумма рассчитана тестовой моделью. После подключения реального источника приоритет будет у цены, которую отдаёт агрегатор.</p>' : ""}
+      ${order.price_is_estimated && order.price_calculation ? `
+        <div class="sheet-route">
+          <strong>Как рассчитана цена</strong>
+          <p class="muted">
+            База ${money(order.price_calculation.base)}
+            + расстояние ${money(order.price_calculation.distance_part)}
+            + время ${money(order.price_calculation.time_part)}
+            × коэффициент ${order.price_calculation.demand_multiplier}
+          </p>
+        </div>
+        <p class="disclaimer">Это демонстрационный ориентировочный расчёт. После подключения реального источника приоритет будет у цены, которую отдаёт агрегатор.</p>
+      ` : ""}
     `;
     $("sheetBackdrop").classList.remove("hidden");
     tg?.HapticFeedback?.impactOccurred("light");
