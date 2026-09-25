@@ -54,26 +54,48 @@ def test_miniapp_javascript_uses_svg_icons_without_emoji():
         assert emoji not in response.text
 
 
-def test_miniapp_demo_accepts_incoming_order(monkeypatch):
+def test_miniapp_demo_order_lifecycle(monkeypatch):
     monkeypatch.setenv("YANDEX_MOCK_MODE", "true")
     monkeypatch.setenv("TELEGRAM_MINI_APP_DEMO_MODE", "true")
     get_settings.cache_clear()
     reset_mock_marketplace_orders()
 
     try:
-        response = client.post(
+        accepted = client.post(
             "/api/v1/miniapp/orders/market-2002/accept?demo=true"
         )
-        assert response.status_code == 200
-        payload = response.json()
+        assert accepted.status_code == 200
+        payload = accepted.json()
         assert payload["ok"] is True
-        assert payload["order"]["status"] == "accepted"
+        assert payload["order"]["status"] == "active"
         assert payload["order"]["can_accept"] is False
+        assert payload["order"]["can_complete"] is True
+        assert payload["summary"]["active_count"] == 1
+
+        blocked = client.post(
+            "/api/v1/miniapp/orders/market-2003/accept?demo=true"
+        )
+        assert blocked.status_code == 409
+
+        completed = client.post(
+            "/api/v1/miniapp/orders/market-2002/complete?demo=true"
+        )
+        assert completed.status_code == 200
+        completed_payload = completed.json()
+        assert completed_payload["order"]["status"] == "completed"
+        assert completed_payload["order"]["can_complete"] is False
+        assert completed_payload["summary"]["active_count"] == 0
 
         repeat = client.post(
-            "/api/v1/miniapp/orders/market-2002/accept?demo=true"
+            "/api/v1/miniapp/orders/market-2002/complete?demo=true"
         )
         assert repeat.status_code == 409
+
+        next_order = client.post(
+            "/api/v1/miniapp/orders/market-2003/accept?demo=true"
+        )
+        assert next_order.status_code == 200
+        assert next_order.json()["order"]["status"] == "active"
     finally:
         reset_mock_marketplace_orders()
         get_settings.cache_clear()
