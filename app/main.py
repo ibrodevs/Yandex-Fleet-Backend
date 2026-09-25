@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from pathlib import Path
 from contextlib import asynccontextmanager
@@ -19,25 +20,53 @@ setup_logging(settings.LOG_LEVEL)
 logger = logging.getLogger(__name__)
 
 
+async def _configure_telegram_after_startup(runtime) -> None:
+    try:
+        await runtime.configure_webhook()
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        logger.exception(
+            "Telegram webhook setup failed after app startup. "
+            "Backend remains online; check /api/v1/telegram/status."
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     runtime = None
+    telegram_setup_task: asyncio.Task | None = None
 
     if (
         settings.TELEGRAM_BOT_MODE.lower() == "webhook"
         and settings.TELEGRAM_BOT_TOKEN
     ):
         try:
+            # Local dispatcher/database initialization does not use the network
+            # and must not depend on Telegram API availability.
             runtime = await get_webhook_runtime()
+
+            # Telegram API calls must never block ASGI readiness. PythonAnywhere
+            # can otherwise report 502-backend while setWebhook/menu setup waits
+            # for its outbound proxy.
             if settings.TELEGRAM_WEBHOOK_AUTO_SETUP:
-                await runtime.configure_webhook()
+                telegram_setup_task = asyncio.create_task(
+                    _configure_telegram_after_startup(runtime)
+                )
         except Exception:
             logger.exception(
-                "Telegram webhook setup failed. "
+                "Telegram local runtime initialization failed. "
                 "Backend will stay online; check /api/v1/telegram/status."
             )
 
     yield
+
+    if telegram_setup_task is not None and not telegram_setup_task.done():
+        telegram_setup_task.cancel()
+        try:
+            await telegram_setup_task
+        except asyncio.CancelledError:
+            pass
 
     if runtime is not None:
         await runtime.close()
