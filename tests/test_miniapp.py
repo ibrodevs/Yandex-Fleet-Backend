@@ -1,3 +1,4 @@
+from app.marketplace.mock import reset_mock_marketplace_orders
 from fastapi.testclient import TestClient
 
 from app.config import get_settings
@@ -51,3 +52,28 @@ def test_miniapp_javascript_uses_svg_icons_without_emoji():
     assert 'href="#i-' in response.text
     for emoji in ("📍", "⏱", "💵", "💳", "⭐", "🚕", "📊", "👤"):
         assert emoji not in response.text
+
+
+def test_miniapp_demo_accepts_incoming_order(monkeypatch):
+    monkeypatch.setenv("YANDEX_MOCK_MODE", "true")
+    monkeypatch.setenv("TELEGRAM_MINI_APP_DEMO_MODE", "true")
+    get_settings.cache_clear()
+    reset_mock_marketplace_orders()
+
+    try:
+        response = client.post(
+            "/api/v1/miniapp/orders/market-2002/accept?demo=true"
+        )
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["ok"] is True
+        assert payload["order"]["status"] == "accepted"
+        assert payload["order"]["can_accept"] is False
+
+        repeat = client.post(
+            "/api/v1/miniapp/orders/market-2002/accept?demo=true"
+        )
+        assert repeat.status_code == 409
+    finally:
+        reset_mock_marketplace_orders()
+        get_settings.cache_clear()
