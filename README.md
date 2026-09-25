@@ -304,3 +304,46 @@ The public API does not expose supported generic methods for:
 - completing a driver's real Yandex Pro order.
 
 Those actions must not return fake success in real mode.
+
+
+## PythonAnywhere deployment
+
+The backend is prepared to run on PythonAnywhere as a FastAPI ASGI site with
+the Telegram bot connected by webhook, so production does not require a
+separate long-polling process.
+
+Use:
+
+```text
+docs/PYTHONANYWHERE.md
+```
+
+Production settings are based on:
+
+```text
+.env.pythonanywhere.example
+```
+
+The production flow is:
+
+```text
+Telegram -> HTTPS webhook -> FastAPI -> FleetProvider
+```
+
+Local development can continue to use:
+
+```bash
+python -m app.bot
+```
+
+with:
+
+```env
+TELEGRAM_BOT_MODE=polling
+```
+
+PythonAnywhere production should use:
+
+```env
+TELEGRAM_BOT_MODE=webhook
+```
