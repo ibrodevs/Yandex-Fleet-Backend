@@ -2,23 +2,60 @@
 
 Backend for Yandex Fleet integration plus a Telegram park bot.
 
-## Stage 1
+## Stage 1 status
 
-Stage 1 can already be tested **without Yandex Fleet credentials and without Docker**.
+Stage 1 is designed to be fully testable **without Yandex Fleet credentials and without Docker**.
 
-The mock mode provides:
+Implemented:
 
-- test driver profiles;
-- test orders;
+- stable backend contract for drivers and orders;
+- provider abstraction `FleetProvider` for switching mock → real Yandex later;
+- rich mock driver profile;
+- rich mock order data;
 - driver lookup by phone;
-- Telegram park bot;
-- profile and order screens in Telegram;
+- driver summary/statistics;
+- order list with pagination;
+- order details;
+- active-order screen;
 - mock order completion;
-- a clean switch to the real Yandex integration later.
+- Telegram bot;
+- persistent Telegram ↔ driver binding in SQLite;
+- binding recovery after bot restart;
+- secure own-contact check during binding;
+- one-driver-to-one-Telegram binding transfer;
+- ownership check before opening/completing an order;
+- unlink/relink flow;
+- Telegram command menu;
+- graceful handling of unchanged Telegram messages;
+- automated API/storage tests;
+- GitHub Actions test workflow.
 
 The public Yandex Fleet API does not expose a documented generic method for
 completing a driver's real Yandex Pro order. Therefore completion is enabled
 only for mock orders at this stage.
+
+## Stage 1 architecture
+
+```text
+Telegram
+   │
+   ▼
+app.bot
+   │
+   ├── SQLite link store (.data/telegram_bot.sqlite3)
+   │
+   ▼
+FastAPI backend
+   │
+   ▼
+FleetProvider
+   ├── MockFleetProvider   ← Stage 1
+   └── YandexFleetProvider ← Stage 2 / real park credentials
+```
+
+Telegram never talks to Yandex directly. When real park credentials arrive,
+the bot UI and handlers do not need to be rewritten; only the real provider
+adapter needs to map Fleet API data into the existing backend contract.
 
 ## Requirements
 
@@ -26,34 +63,33 @@ only for mock orders at this stage.
 - Telegram bot token from `@BotFather`
 
 PostgreSQL and Redis are **not required for the Stage 1 mock test**.
-They remain part of the later production architecture.
 
 ## Run without Docker
 
-Clone and enter the repository:
+Clone or update the repository:
 
 ```bash
 git clone https://github.com/ibrodevs/Yandex-Fleet-Backend.git
 cd Yandex-Fleet-Backend
 ```
 
-Create a virtual environment:
+If you already cloned it:
+
+```bash
+git pull origin main
+```
+
+Create and activate the environment:
 
 ```bash
 python3.12 -m venv .venv
 source .venv/bin/activate
 ```
 
-On Windows:
-
-```powershell
-py -3.12 -m venv .venv
-.venv\Scripts\activate
-```
-
 Install dependencies:
 
 ```bash
+python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
@@ -67,68 +103,158 @@ Set at least:
 
 ```env
 YANDEX_MOCK_MODE=true
+
 TELEGRAM_BOT_TOKEN=YOUR_BOTFATHER_TOKEN
 TELEGRAM_BOT_BACKEND_URL=http://127.0.0.1:8000
+TELEGRAM_BOT_DB_PATH=.data/telegram_bot.sqlite3
+TELEGRAM_BOT_ORDERS_PAGE_SIZE=5
 ```
 
-### Terminal 1 — backend
+## Terminal 1 — backend
 
 ```bash
+source .venv/bin/activate
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-Check:
+Quick checks:
 
 ```bash
 curl http://127.0.0.1:8000/health
-curl http://127.0.0.1:8000/api/v1/drivers
-curl "http://127.0.0.1:8000/api/v1/orders?driver_id=driver-001"
+curl http://127.0.0.1:8000/api/v1/drivers/driver-001
+curl http://127.0.0.1:8000/api/v1/drivers/driver-001/summary
+curl "http://127.0.0.1:8000/api/v1/orders?driver_id=driver-001&limit=5"
+curl http://127.0.0.1:8000/api/v1/integrations/yandex/status
 ```
 
-### Terminal 2 — Telegram bot
-
-Activate the same virtual environment and run:
+## Terminal 2 — Telegram bot
 
 ```bash
+source .venv/bin/activate
 python -m app.bot
 ```
 
-Then open the bot in Telegram:
+Open the bot in Telegram.
+
+For the fastest mock test:
 
 ```text
 /start
 /mocklogin
 ```
 
-`/mocklogin` is available only while `YANDEX_MOCK_MODE=true`.
-
-Test driver:
+For the normal binding flow use the button:
 
 ```text
-id: driver-001
+📱 Поделиться номером
+```
+
+The bot checks that the shared Telegram contact belongs to the current
+Telegram user and asks the backend to resolve that phone to a driver.
+
+Mock driver:
+
+```text
+driver_id: driver-001
 phone: +996555000001
 ```
 
-The bot menu contains:
+## Bot menu
 
 ```text
 👤 Профиль
 📦 Заказы
+
+📊 Статистика
+🚕 Активный заказ
+
 🔄 Обновить
-🚪 Выйти
+🔗 Привязка
 ```
 
-The active mock order also has a `Завершить заказ` button.
+### Profile
 
-## Tests
+Shows:
+
+- driver name;
+- phone;
+- work status;
+- rating;
+- priority;
+- balance;
+- tariffs;
+- vehicle;
+- completed/active/cancelled order counters;
+- earnings;
+- distance.
+
+### Orders
+
+Shows a paginated list. Selecting an order opens:
+
+- status;
+- tariff;
+- payment type;
+- price;
+- pickup;
+- destination;
+- distance;
+- duration;
+- creation/start/completion timestamps.
+
+An active mock order also has:
+
+```text
+✅ Завершить заказ
+```
+
+### Persistent Telegram binding
+
+Bindings are stored in:
+
+```text
+.data/telegram_bot.sqlite3
+```
+
+The database is created automatically.
+
+Test persistence:
+
+1. run `/mocklogin`;
+2. stop the bot with `Ctrl+C`;
+3. start `python -m app.bot` again;
+4. send `/start`;
+5. the bot should restore the linked driver automatically.
+
+Use `🔗 Привязка` or `/unlink` to remove the binding.
+
+## Automated tests
+
+Run locally:
 
 ```bash
 pytest -q
 ```
 
-## Switching to real Yandex Fleet later
+Tests cover:
 
-When the taxi park sends credentials:
+- base API;
+- mock profile;
+- phone lookup;
+- driver summary;
+- order list;
+- pagination;
+- detailed order payload;
+- integration status;
+- persistent Telegram binding;
+- unlink;
+- transfer of one driver binding to a new Telegram user.
+
+GitHub Actions also runs `pytest -q` on pushes to `main`.
+
+## Switching to the real park later
+
+When the client sends:
 
 ```env
 YANDEX_CLIENT_ID=...
@@ -136,24 +262,37 @@ YANDEX_API_KEY=...
 YANDEX_PARK_ID=...
 ```
 
-we can connect the existing service layer to real Fleet data and then set:
+the next integration step is to implement the mapping inside:
+
+```text
+app/services/fleet/yandex.py
+```
+
+After that:
 
 ```env
 YANDEX_MOCK_MODE=false
 ```
 
-The Telegram bot does not need to be redesigned: it already talks to the
-backend API instead of directly to Yandex.
+The public REST routes and Telegram bot remain the same.
 
-## Existing architecture
+## Stage 1 definition of done
 
-- FastAPI
-- SQLAlchemy / Alembic
-- PostgreSQL
-- Redis
-- Yandex Fleet service layer
-- order filtering
-- Telegram bot
+Stage 1 is considered complete when all of these pass:
+
+- backend starts without Docker;
+- bot starts without Docker;
+- `pytest -q` passes;
+- `/mocklogin` links driver-001;
+- profile displays full mock driver data;
+- statistics display correctly;
+- order list paginates;
+- order details open;
+- active mock order completes;
+- restart preserves Telegram binding;
+- unlink removes the binding;
+- foreign order IDs are rejected by the bot;
+- real mode never fakes successful completion of a Yandex Pro order.
 
 ## Public Fleet API limitations
 
