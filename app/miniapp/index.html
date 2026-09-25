@@ -4,11 +4,9 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="color-scheme" content="light dark" />
+  <meta name="theme-color" content="#F5F5F7" />
   <title>Fleet Hub</title>
   <script src="https://telegram.org/js/telegram-web-app.js?63"></script>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/miniapp/styles.css" />
 </head>
 <body>
@@ -36,60 +34,38 @@
   <div class="app-shell">
     <header class="topbar">
       <div class="topbar-copy">
-        <div class="eyebrow">FLEET HUB</div>
-        <h1 id="pageTitle">Заказы</h1>
+        <h1>Fleet Hub</h1>
         <p class="topbar-subtitle" id="driverCar">Загрузка данных</p>
       </div>
-      <button class="icon-btn" id="refreshButton" type="button" aria-label="Обновить">
+      <button class="icon-btn" id="refreshButton" type="button" aria-label="Обновить заказы">
         <svg class="icon"><use href="#i-refresh"></use></svg>
       </button>
     </header>
 
     <main class="content">
-      <section id="ordersView" class="view active">
-        <div class="summary-grid">
-          <article class="metric-card">
-            <div class="metric-icon"><svg class="icon"><use href="#i-orders"></use></svg></div>
-            <div><span>Новые</span><strong id="incomingCount">—</strong></div>
-          </article>
-          <article class="metric-card">
-            <div class="metric-icon"><svg class="icon"><use href="#i-trending"></use></svg></div>
-            <div><span>Средняя цена</span><strong id="averagePrice">—</strong></div>
-          </article>
-          <article class="metric-card">
-            <div class="metric-icon"><svg class="icon"><use href="#i-check"></use></svg></div>
-            <div><span>Активные</span><strong id="activeCount">—</strong></div>
-          </article>
+      <section id="ordersView" class="view active" aria-label="Заказы">
+        <div class="summary-grid" aria-label="Сводка по заказам">
+          <article class="metric-card"><span>Новые</span><strong id="incomingCount">—</strong></article>
+          <article class="metric-card"><span>Активные</span><strong id="activeCount">—</strong></article>
+          <article class="metric-card"><span>Средняя цена</span><strong id="averagePrice">—</strong></article>
         </div>
 
-        <section class="panel">
-          <div class="panel-head">
+        <section id="activeOrderSection" class="active-order-section hidden" aria-labelledby="activeOrderTitle">
+          <div class="section-heading">
+            <div><span class="section-kicker">В поездке</span><h2 id="activeOrderTitle">Активный заказ</h2></div>
+          </div>
+          <div id="activeOrderContent"></div>
+        </section>
+
+        <section class="feed-section" id="ordersPanel" aria-labelledby="ordersSectionTitle">
+          <div class="section-heading">
             <div>
               <h2 id="ordersSectionTitle">Поступающие заказы</h2>
-              <p id="ordersSectionSubtitle">Fasten, Яндекс и Везёт в одной ленте</p>
+              <p id="ordersSectionSubtitle">Заказы всех подключённых агрегаторов</p>
             </div>
-          </div>
-
-          <div class="tabs" id="sourceFilters">
-            <button class="tab active" type="button" data-source="all">Все</button>
-            <button class="tab" type="button" data-source="fasten">Fasten</button>
-            <button class="tab" type="button" data-source="yandex">Яндекс</button>
-            <button class="tab" type="button" data-source="vezet">Везёт</button>
-          </div>
-
-          <div class="filter-row">
-            <label class="field compact">
-              <span>Статус</span>
-              <select id="statusFilter">
-                <option value="incoming">Новые</option>
-                <option value="all">Все статусы</option>
-                <option value="active">Активные</option>
-                <option value="completed">Завершённые</option>
-              </select>
-            </label>
-            <label class="field compact">
-              <span>Тариф</span>
-              <select id="tariffFilter">
+            <label class="tariff-control">
+              <span class="sr-only">Тариф</span>
+              <select id="tariffFilter" aria-label="Фильтр по тарифу">
                 <option value="all">Все тарифы</option>
                 <option value="econom">Эконом</option>
                 <option value="comfort">Комфорт</option>
@@ -99,11 +75,26 @@
             </label>
           </div>
 
+          <div class="filter-block">
+            <div class="chips" id="sourceFilters" aria-label="Фильтр по агрегатору">
+              <button class="chip active" type="button" data-source="all">Все</button>
+              <button class="chip" type="button" data-source="fasten">Fasten</button>
+              <button class="chip" type="button" data-source="yandex">Яндекс</button>
+              <button class="chip" type="button" data-source="vezet">Везёт</button>
+            </div>
+            <div class="segmented" id="statusFilters" aria-label="Фильтр по статусу">
+              <button class="segment active" type="button" data-status="incoming">Новые</button>
+              <button class="segment" type="button" data-status="active">Активные</button>
+              <button class="segment" type="button" data-status="completed">Завершённые</button>
+              <button class="segment" type="button" data-status="all">Все</button>
+            </div>
+          </div>
+
           <div id="ordersList" class="orders-list"></div>
           <div id="emptyState" class="empty-state hidden">
-            <svg class="empty-icon"><use href="#i-orders"></use></svg>
-            <strong>Заказов нет</strong>
-            <span>Измените фильтры или обновите ленту.</span>
+            <span class="empty-icon-wrap"><svg class="empty-icon"><use href="#i-orders"></use></svg></span>
+            <strong>Здесь пока нет заказов</strong>
+            <span>Попробуйте изменить фильтры или обновить ленту.</span>
           </div>
         </section>
 
@@ -113,35 +104,26 @@
         </div>
       </section>
 
-      <section id="statsView" class="view">
-        <section class="panel">
-          <div class="panel-head">
-            <div>
-              <h2>Статистика ленты</h2>
-              <p>Текущая картина поступающих заказов</p>
-            </div>
-          </div>
-          <div class="stats-panel" id="statsPanel"></div>
-        </section>
+      <section id="statsView" class="view" aria-label="Статистика">
+        <div class="page-heading"><h2>Статистика</h2><p>Сводка по текущей ленте заказов</p></div>
+        <div id="statsPanel" class="settings-stack"></div>
       </section>
 
-      <section id="profileView" class="view">
-        <section class="panel profile-card" id="profileCard"></section>
+      <section id="profileView" class="view" aria-label="Профиль">
+        <div class="page-heading"><h2>Профиль</h2><p>Данные водителя и автомобиля</p></div>
+        <div id="profileCard" class="settings-stack"></div>
       </section>
     </main>
 
-    <nav class="bottom-nav" aria-label="Навигация">
-      <button class="nav-item active" type="button" data-view="ordersView" data-title="Заказы">
-        <svg class="nav-icon"><use href="#i-orders"></use></svg>
-        <span>Заказы</span>
+    <nav class="bottom-nav" aria-label="Основная навигация">
+      <button class="nav-item active" type="button" data-view="ordersView">
+        <svg class="nav-icon"><use href="#i-orders"></use></svg><span>Заказы</span>
       </button>
-      <button class="nav-item" type="button" data-view="statsView" data-title="Статистика">
-        <svg class="nav-icon"><use href="#i-chart"></use></svg>
-        <span>Статистика</span>
+      <button class="nav-item" type="button" data-view="statsView">
+        <svg class="nav-icon"><use href="#i-chart"></use></svg><span>Статистика</span>
       </button>
-      <button class="nav-item" type="button" data-view="profileView" data-title="Профиль">
-        <svg class="nav-icon"><use href="#i-user"></use></svg>
-        <span>Профиль</span>
+      <button class="nav-item" type="button" data-view="profileView">
+        <svg class="nav-icon"><use href="#i-user"></use></svg><span>Профиль</span>
       </button>
     </nav>
   </div>
@@ -149,14 +131,14 @@
   <div class="sheet-backdrop hidden" id="sheetBackdrop">
     <article class="sheet" id="orderSheet" role="dialog" aria-modal="true" aria-label="Детали заказа">
       <div class="sheet-handle"></div>
-      <button class="sheet-close" id="sheetClose" type="button" aria-label="Закрыть">
+      <button class="sheet-close" id="sheetClose" type="button" aria-label="Закрыть детали заказа">
         <svg class="icon"><use href="#i-close"></use></svg>
       </button>
       <div id="sheetContent"></div>
     </article>
   </div>
 
-  <div class="toast hidden" id="toast" role="status"></div>
+  <div class="toast hidden" id="toast" role="status" aria-live="polite"></div>
   <script src="/miniapp/app.js"></script>
 </body>
 </html>
