@@ -2,6 +2,7 @@ from app.marketplace.mock import reset_mock_marketplace_orders
 from app.marketplace.pricing import estimate_price
 from app.marketplace.service import (
     accept_marketplace_order,
+    complete_marketplace_order,
     get_marketplace_order,
     get_marketplace_summary,
     list_marketplace_orders,
@@ -61,9 +62,13 @@ def test_marketplace_summary_and_details():
     assert order["source"] == "fasten"
 
 
-def test_accept_incoming_marketplace_order():
+def test_accept_active_complete_marketplace_order_lifecycle():
     reset_mock_marketplace_orders()
     try:
+        initial = get_marketplace_summary("driver-001")
+        assert initial["active_count"] == 0
+        assert initial["completed_count"] >= 1
+
         before = get_marketplace_order(
             "market-2001",
             driver_id="driver-001",
@@ -72,17 +77,48 @@ def test_accept_incoming_marketplace_order():
         assert before["status"] == "incoming"
         assert before["can_accept"] is True
 
-        accepted = accept_marketplace_order(
+        active = accept_marketplace_order(
             "market-2001",
             driver_id="driver-001",
         )
 
-        assert accepted["status"] == "accepted"
-        assert accepted["status_title"] == "Принят"
-        assert accepted["can_accept"] is False
-        assert accepted["accepted_at"]
+        assert active["status"] == "active"
+        assert active["status_title"] == "Активный"
+        assert active["can_accept"] is False
+        assert active["can_complete"] is True
+        assert active["accepted_at"]
+        assert active["active_at"]
 
         summary = get_marketplace_summary("driver-001")
-        assert summary["accepted_count"] >= 2
+        assert summary["active_count"] == 1
+
+        try:
+            accept_marketplace_order(
+                "market-2002",
+                driver_id="driver-001",
+            )
+        except ValueError as exc:
+            assert "активный заказ" in str(exc)
+        else:
+            raise AssertionError("Second active order must be rejected")
+
+        completed = complete_marketplace_order(
+            "market-2001",
+            driver_id="driver-001",
+        )
+        assert completed["status"] == "completed"
+        assert completed["status_title"] == "Завершён"
+        assert completed["can_complete"] is False
+        assert completed["completed_at"]
+
+        final = get_marketplace_summary("driver-001")
+        assert final["active_count"] == 0
+        assert final["completed_count"] >= 2
+
+        next_active = accept_marketplace_order(
+            "market-2002",
+            driver_id="driver-001",
+        )
+        assert next_active["status"] == "active"
     finally:
         reset_mock_marketplace_orders()
