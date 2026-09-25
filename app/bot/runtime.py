@@ -5,7 +5,7 @@ import logging
 from dataclasses import dataclass
 
 from aiogram import Dispatcher
-from aiogram.types import BotCommand, Update
+from aiogram.types import BotCommand, MenuButtonWebApp, Update, WebAppInfo
 
 from app.bot.factory import create_bot
 from app.bot.main import build_router
@@ -20,6 +20,7 @@ BOT_COMMANDS = [
     BotCommand(command="profile", description="Профиль водителя"),
     BotCommand(command="orders", description="Заказы"),
     BotCommand(command="stats", description="Статистика"),
+    BotCommand(command="app", description="Парковое приложение"),
     BotCommand(command="unlink", description="Управление привязкой"),
 ]
 
@@ -69,9 +70,18 @@ class TelegramWebhookRuntime:
                     self.links,
                     mock_mode=self.settings.YANDEX_MOCK_MODE,
                     page_size=max(self.settings.TELEGRAM_BOT_ORDERS_PAGE_SIZE, 1),
+                    mini_app_url=self.settings.telegram_mini_app_url(),
                 )
             )
             await self.bot.set_my_commands(BOT_COMMANDS)
+            mini_app_url = self.settings.telegram_mini_app_url()
+            if mini_app_url:
+                await self.bot.set_chat_menu_button(
+                    menu_button=MenuButtonWebApp(
+                        text="🚖 Приложение",
+                        web_app=WebAppInfo(url=mini_app_url),
+                    )
+                )
             self._initialized = True
 
     async def configure_webhook(self) -> None:
