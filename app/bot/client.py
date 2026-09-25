@@ -48,18 +48,46 @@ class BackendClient:
         )
 
     async def get_driver(self, driver_id: str) -> dict[str, Any] | None:
-        return await self._request("GET", f"/api/v1/drivers/{driver_id}")
+        data = await self._request("GET", f"/api/v1/drivers/{driver_id}")
+        return data if isinstance(data, dict) else None
 
-    async def list_orders(self, driver_id: str) -> list[dict[str, Any]]:
+    async def get_driver_summary(self, driver_id: str) -> dict[str, Any] | None:
+        data = await self._request(
+            "GET",
+            f"/api/v1/drivers/{driver_id}/summary",
+        )
+        return data if isinstance(data, dict) else None
+
+    async def list_orders(
+        self,
+        driver_id: str,
+        *,
+        status: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[list[dict[str, Any]], int]:
+        params: dict[str, Any] = {
+            "driver_id": driver_id,
+            "limit": limit,
+            "offset": offset,
+        }
+        if status:
+            params["status"] = status
+
         data = await self._request(
             "GET",
             "/api/v1/orders",
-            params={"driver_id": driver_id},
+            params=params,
         )
         if not isinstance(data, dict):
-            return []
+            return [], 0
+
         items = data.get("items", [])
-        return items if isinstance(items, list) else []
+        total = data.get("total", 0)
+        return (
+            items if isinstance(items, list) else [],
+            int(total) if isinstance(total, int) else 0,
+        )
 
     async def get_order(self, order_id: str) -> dict[str, Any] | None:
         data = await self._request("GET", f"/api/v1/orders/{order_id}")
