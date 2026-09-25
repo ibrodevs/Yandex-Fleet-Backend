@@ -347,3 +347,56 @@ PythonAnywhere production should use:
 ```env
 TELEGRAM_BOT_MODE=webhook
 ```
+
+
+## Telegram Mini App
+
+Stage 1 now also includes a park Mini App served by the same FastAPI application:
+
+```text
+https://<backend-domain>/miniapp/
+```
+
+In the current mock demo it provides a unified incoming-order feed for:
+
+- Fasten
+- Яндекс
+- Везёт
+
+Each card shows the aggregator, tariff, pickup and destination, distance,
+estimated duration, payment type and price. Prices supplied by a mock
+aggregator are shown as exact demo prices. When no source price is available,
+the UI shows `≈` and a transparent demo calculation based on base fare,
+distance, duration and a demand multiplier.
+
+Filters are available by aggregator, status and tariff. The Mini App also has
+statistics and driver profile screens.
+
+Telegram integration:
+
+- `/app` opens the Mini App;
+- the reply keyboard has `🚖 Приложение`;
+- webhook mode configures Telegram's chat menu button;
+- Telegram `initData` is validated server-side before resolving the
+  Telegram-to-driver binding;
+- direct browser demo is allowed only while both
+  `YANDEX_MOCK_MODE=true` and `TELEGRAM_MINI_APP_DEMO_MODE=true`.
+
+For the current PythonAnywhere deployment the demo URL is:
+
+```text
+https://yandexfeetbackend21.pythonanywhere.com/miniapp/
+```
+
+### Updating the PythonAnywhere demo
+
+```bash
+cd ~/Yandex-Fleet-Backend
+git pull origin main
+source ~/.virtualenvs/yandex-fleet/bin/activate
+pip install -r requirements.txt
+pytest -q
+pa website reload --domain yandexfeetbackend21.pythonanywhere.com
+```
+
+After reload, send `/start`, then `/mocklogin`, then `/app` in Telegram.
