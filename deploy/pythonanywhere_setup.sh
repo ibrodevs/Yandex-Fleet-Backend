@@ -57,6 +57,35 @@ if grep -q "PUT_BOTFATHER_TOKEN_HERE\|CHANGE_ME_TO_A_LONG_RANDOM_SECRET\|CHANGE_
   exit 3
 fi
 
+echo "==> Checking production Telegram configuration"
+python - <<'PY'
+from app.config import get_settings
+
+s = get_settings()
+errors = []
+
+if s.TELEGRAM_BOT_MODE.lower() != "webhook":
+    errors.append("TELEGRAM_BOT_MODE must be webhook on PythonAnywhere")
+if not s.TELEGRAM_BOT_TOKEN:
+    errors.append("TELEGRAM_BOT_TOKEN is empty")
+if not s.TELEGRAM_WEBHOOK_SECRET:
+    errors.append("TELEGRAM_WEBHOOK_SECRET is empty")
+if not s.TELEGRAM_WEBHOOK_BASE_URL.startswith("https://"):
+    errors.append("TELEGRAM_WEBHOOK_BASE_URL must use https://")
+if not s.telegram_mini_app_url.startswith("https://"):
+    errors.append("Telegram Mini App URL must use https://")
+
+if errors:
+    for item in errors:
+        print(f"ERROR: {item}")
+    raise SystemExit(5)
+
+print("Telegram mode: webhook")
+print(f"Webhook base: {s.TELEGRAM_WEBHOOK_BASE_URL}")
+print(f"Mini App: {s.telegram_mini_app_url}")
+print("Secrets: configured")
+PY
+
 echo "==> Running test suite"
 pytest -q
 
@@ -76,5 +105,6 @@ echo "Deployment command completed."
 echo "Open:"
 echo "  https://${DOMAIN}/health/ready"
 echo "  https://${DOMAIN}/api/v1/telegram/status"
+echo "  https://${DOMAIN}/miniapp/"
 echo
 echo "If Telegram status is healthy, send /start to the bot."
