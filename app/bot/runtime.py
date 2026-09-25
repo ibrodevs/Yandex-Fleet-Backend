@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from aiogram import Dispatcher
 from aiogram.types import BotCommand, MenuButtonWebApp, Update, WebAppInfo
@@ -33,6 +34,11 @@ class WebhookState:
     last_error: str | None = None
     commands_error: str | None = None
     menu_error: str | None = None
+    updates_processed: int = 0
+    updates_failed: int = 0
+    last_update_id: int | None = None
+    last_update_at: str | None = None
+    last_update_error: str | None = None
 
 
 class TelegramWebhookRuntime:
@@ -156,11 +162,29 @@ class TelegramWebhookRuntime:
         await self._configure_commands()
         await self._configure_menu()
 
-    async def process_update(self, payload: dict) -> None:
+    async def process_update(self, payload: dict) -> bool:
         await self.initialize()
         update = Update.model_validate(payload, context={"bot": self.bot})
+        self.state.last_update_id = update.update_id
+        self.state.last_update_at = datetime.now(UTC).isoformat()
         logger.info("Processing Telegram update id=%s", update.update_id)
-        await self.dispatcher.feed_update(self.bot, update)
+
+        try:
+            await self.dispatcher.feed_update(self.bot, update)
+        except Exception as exc:
+            self.state.updates_failed += 1
+            self.state.last_update_error = (
+                f"{type(exc).__name__}: {exc}"
+            )
+            logger.exception(
+                "Telegram update failed id=%s",
+                update.update_id,
+            )
+            return False
+
+        self.state.updates_processed += 1
+        self.state.last_update_error = None
+        return True
 
     async def remote_status(self) -> dict:
         await self.initialize()
