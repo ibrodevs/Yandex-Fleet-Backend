@@ -21,7 +21,7 @@ class DriverLink:
 
 class DriverLinkStore:
     def __init__(self, db_path: str) -> None:
-        self.db_path = Path(db_path)
+        self.db_path = Path(db_path).expanduser()
 
     async def init(self) -> None:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
