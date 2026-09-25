@@ -4,52 +4,55 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
-from app.config import get_settings
-from app.mock_data import get_driver as get_mock_driver
-from app.mock_data import get_driver_by_phone as get_mock_driver_by_phone
-from app.mock_data import list_drivers as list_mock_drivers
+from app.services.fleet import FleetProviderError, get_fleet_provider
 
 router = APIRouter(prefix="/api/v1", tags=["drivers"])
 
 
+def _provider_error(exc: FleetProviderError) -> HTTPException:
+    return HTTPException(status_code=503, detail=str(exc))
+
+
 @router.get("/drivers")
 async def list_drivers() -> dict[str, Any]:
-    settings = get_settings()
-    if settings.YANDEX_MOCK_MODE:
-        items = list_mock_drivers()
-        return {"items": items, "total": len(items)}
-    return {"items": [], "total": 0}
+    try:
+        items = await get_fleet_provider().list_drivers()
+    except FleetProviderError as exc:
+        raise _provider_error(exc) from exc
+    return {"items": items, "total": len(items)}
 
 
 @router.get("/drivers/by-phone/{phone}")
 async def get_driver_by_phone(phone: str) -> dict[str, Any]:
-    settings = get_settings()
-    if not settings.YANDEX_MOCK_MODE:
-        raise HTTPException(
-            status_code=501,
-            detail="Поиск водителя по телефону пока доступен только в mock-режиме.",
-        )
-
-    driver = get_mock_driver_by_phone(phone)
+    try:
+        driver = await get_fleet_provider().get_driver_by_phone(phone)
+    except FleetProviderError as exc:
+        raise _provider_error(exc) from exc
     if not driver:
         raise HTTPException(status_code=404, detail="Водитель не найден.")
     return driver
 
 
+@router.get("/drivers/{driver_id}/summary")
+async def get_driver_summary(driver_id: str) -> dict[str, Any]:
+    try:
+        summary = await get_fleet_provider().get_driver_summary(driver_id)
+    except FleetProviderError as exc:
+        raise _provider_error(exc) from exc
+    if not summary:
+        raise HTTPException(status_code=404, detail="Водитель не найден.")
+    return summary
+
+
 @router.get("/drivers/{driver_id}")
 async def get_driver(driver_id: str) -> dict[str, Any]:
-    settings = get_settings()
-    if settings.YANDEX_MOCK_MODE:
-        driver = get_mock_driver(driver_id)
-        if not driver:
-            raise HTTPException(status_code=404, detail="Водитель не найден.")
-        return driver
-
-    return {
-        "id": driver_id,
-        "yandex_driver_id": driver_id,
-        "is_enabled": True,
-    }
+    try:
+        driver = await get_fleet_provider().get_driver(driver_id)
+    except FleetProviderError as exc:
+        raise _provider_error(exc) from exc
+    if not driver:
+        raise HTTPException(status_code=404, detail="Водитель не найден.")
+    return driver
 
 
 @router.get("/drivers/{driver_id}/filter-settings")
