@@ -169,6 +169,9 @@ _RAW_OFFERS: list[dict[str, Any]] = [
     },
 ]
 
+_INITIAL_OFFERS = deepcopy(_RAW_OFFERS)
+
+
 
 def list_mock_marketplace_orders() -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
@@ -225,3 +228,8 @@ def accept_mock_marketplace_order(
                 return item
         return None
     return None
+
+
+def reset_mock_marketplace_orders() -> None:
+    _RAW_OFFERS.clear()
+    _RAW_OFFERS.extend(deepcopy(_INITIAL_OFFERS))
