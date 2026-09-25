@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,6 +32,37 @@ _RATES: dict[str, dict[str, TariffRate]] = {
 _DEFAULT = TariffRate(base=75, per_km=24, per_minute=4.5, minimum=150)
 
 
+def estimate_price_details(
+    *,
+    source: str,
+    tariff: str,
+    distance_km: float,
+    duration_minutes: int,
+    demand_multiplier: float = 1.0,
+) -> dict[str, Any]:
+    rate = _RATES.get(source, {}).get(tariff, _DEFAULT)
+    distance_part = max(distance_km, 0) * rate.per_km
+    time_part = max(duration_minutes, 0) * rate.per_minute
+    subtotal = rate.base + distance_part + time_part
+    multiplier = max(demand_multiplier, 1.0)
+    multiplied = subtotal * multiplier
+    total = float(max(rate.minimum, round(multiplied / 10) * 10))
+
+    return {
+        "base": rate.base,
+        "per_km": rate.per_km,
+        "per_minute": rate.per_minute,
+        "distance_part": round(distance_part, 2),
+        "time_part": round(time_part, 2),
+        "demand_multiplier": round(multiplier, 2),
+        "minimum": rate.minimum,
+        "subtotal": round(subtotal, 2),
+        "total": total,
+        "currency": "KGS",
+        "is_demo_formula": True,
+    }
+
+
 def estimate_price(
     *,
     source: str,
@@ -39,17 +71,14 @@ def estimate_price(
     duration_minutes: int,
     demand_multiplier: float = 1.0,
 ) -> float:
-    """Demo estimator used only when an aggregator did not provide a price.
+    """Demo estimator used only when an aggregator did not provide a price."""
 
-    It is intentionally deterministic and marked as an estimate in API output.
-    Real provider quote/offer prices must replace it when integrations are added.
-    """
-
-    rate = _RATES.get(source, {}).get(tariff, _DEFAULT)
-    raw = (
-        rate.base
-        + max(distance_km, 0) * rate.per_km
-        + max(duration_minutes, 0) * rate.per_minute
+    return float(
+        estimate_price_details(
+            source=source,
+            tariff=tariff,
+            distance_km=distance_km,
+            duration_minutes=duration_minutes,
+            demand_multiplier=demand_multiplier,
+        )["total"]
     )
-    raw *= max(demand_multiplier, 1.0)
-    return float(max(rate.minimum, round(raw / 10) * 10))
