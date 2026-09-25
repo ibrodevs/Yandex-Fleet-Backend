@@ -4,6 +4,7 @@ from typing import Any
 
 from app.marketplace.mock import (
     accept_mock_marketplace_order,
+    complete_mock_marketplace_order,
     list_mock_marketplace_orders,
 )
 
@@ -66,8 +67,14 @@ def get_marketplace_summary(driver_id: str) -> dict[str, Any]:
     return {
         "driver_id": driver_id,
         "incoming_count": len(incoming),
+        "active_count": len(
+            [item for item in items if item["status"] == "active"]
+        ),
         "accepted_count": len(
-            [item for item in items if item["status"] == "accepted"]
+            [item for item in items if item["status"] == "active"]
+        ),
+        "completed_count": len(
+            [item for item in items if item["status"] == "completed"]
         ),
         "estimated_price_count": len(estimated),
         "exact_price_count": len(exact),
@@ -90,6 +97,24 @@ def accept_marketplace_order(
 ) -> dict[str, Any]:
     try:
         order = accept_mock_marketplace_order(
+            order_id,
+            driver_id=driver_id,
+        )
+    except ValueError as exc:
+        raise ValueError(str(exc)) from exc
+
+    if not order:
+        raise LookupError("Заказ не найден.")
+    return order
+
+
+def complete_marketplace_order(
+    order_id: str,
+    *,
+    driver_id: str,
+) -> dict[str, Any]:
+    try:
+        order = complete_mock_marketplace_order(
             order_id,
             driver_id=driver_id,
         )
