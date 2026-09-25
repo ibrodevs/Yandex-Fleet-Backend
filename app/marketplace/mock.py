@@ -105,9 +105,10 @@ _RAW_OFFERS: list[dict[str, Any]] = [
         "source_price": 540.0,
         "demand_multiplier": 1.0,
         "payment_method": "card",
-        "status": "active",
-        "status_title": "Активный",
+        "status": "completed",
+        "status_title": "Завершён",
         "created_at": _ts(12),
+        "completed_at": _ts(4),
         "expires_in_seconds": None,
     },
     {
