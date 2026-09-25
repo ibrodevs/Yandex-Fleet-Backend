@@ -37,6 +37,11 @@ async def telegram_status() -> dict[str, Any]:
             payload["commands_error"] = runtime.state.commands_error
             payload["menu_error"] = runtime.state.menu_error
             payload["mini_app_url"] = settings.telegram_mini_app_url
+            payload["updates_processed"] = runtime.state.updates_processed
+            payload["updates_failed"] = runtime.state.updates_failed
+            payload["last_update_id"] = runtime.state.last_update_id
+            payload["last_update_at"] = runtime.state.last_update_at
+            payload["last_update_error"] = runtime.state.last_update_error
             remote = await runtime.remote_status()
             payload["telegram"] = remote
         except Exception as exc:
@@ -79,5 +84,5 @@ async def telegram_webhook(
         raise HTTPException(status_code=400, detail="Invalid Telegram update.")
 
     runtime = await get_webhook_runtime()
-    await runtime.process_update(payload)
-    return {"ok": True}
+    handled = await runtime.process_update(payload)
+    return {"ok": True, "handled": handled}
