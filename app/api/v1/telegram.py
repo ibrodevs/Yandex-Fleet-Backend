@@ -36,7 +36,7 @@ async def telegram_status() -> dict[str, Any]:
             payload["last_setup_error"] = runtime.state.last_error
             payload["commands_error"] = runtime.state.commands_error
             payload["menu_error"] = runtime.state.menu_error
-            payload["mini_app_url"] = settings.telegram_mini_app_url()
+            payload["mini_app_url"] = settings.telegram_mini_app_url
             remote = await runtime.remote_status()
             payload["telegram"] = remote
         except Exception as exc:
