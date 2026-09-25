@@ -47,12 +47,22 @@ class Settings(BaseSettings):
     TELEGRAM_WEBHOOK_PATH: str = "/api/v1/telegram/webhook"
     TELEGRAM_WEBHOOK_SECRET: str | None = None
     TELEGRAM_WEBHOOK_AUTO_SETUP: bool = True
+    TELEGRAM_MINI_APP_URL: str = ""
+    TELEGRAM_MINI_APP_DEMO_MODE: bool = True
 
     ORDER_SYNC_INTERVAL_SECONDS: int = 10
     DRIVER_SYNC_INTERVAL_SECONDS: int = 300
     VEHICLE_SYNC_INTERVAL_SECONDS: int = 600
 
     LOG_LEVEL: str = "INFO"
+
+    @property
+    def telegram_mini_app_url(self) -> str:
+        if self.TELEGRAM_MINI_APP_URL:
+            return self.TELEGRAM_MINI_APP_URL.rstrip("/") + "/"
+        if self.TELEGRAM_WEBHOOK_BASE_URL:
+            return self.TELEGRAM_WEBHOOK_BASE_URL.rstrip("/") + "/miniapp/"
+        return ""
 
     @property
     def is_yandex_configured(self) -> bool:
