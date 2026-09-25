@@ -314,3 +314,30 @@ server log and `/api/v1/telegram/status`, correct the environment, then reload.
 
 That is expected for requests that do not contain Telegram's secret header.
 The endpoint is not intended for browser access.
+
+
+## Mini App
+
+The same PythonAnywhere ASGI site serves the Telegram Mini App:
+
+```text
+https://yandexfeetbackend21.pythonanywhere.com/miniapp/
+```
+
+No separate frontend hosting is required.
+
+In mock mode this URL can also be opened directly in a browser for a client
+demo. Inside Telegram, use `/mocklogin` once and then `/app`, or press
+`🚖 Приложение`.
+
+After updating the repository, reload the site:
+
+```bash
+cd ~/Yandex-Fleet-Backend
+git pull origin main
+source ~/.virtualenvs/yandex-fleet/bin/activate
+pytest -q
+pa website reload --domain yandexfeetbackend21.pythonanywhere.com
+```
+
+On startup the bot configures the Mini App chat-menu button automatically.
