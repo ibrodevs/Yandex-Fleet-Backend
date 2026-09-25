@@ -28,6 +28,7 @@ from app.bot.presenters import (
     stats_text,
 )
 from app.bot.storage import DriverLinkStore
+from app.bot.service import BotBackend
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -51,7 +52,7 @@ async def _safe_edit(
 
 
 def build_router(
-    backend: BackendClient,
+    backend: BotBackend,
     links: DriverLinkStore,
     *,
     mock_mode: bool,
@@ -542,6 +543,12 @@ def build_router(
 
 async def run() -> None:
     settings = get_settings()
+    if settings.TELEGRAM_BOT_MODE.lower() != "polling":
+        raise RuntimeError(
+            "python -m app.bot предназначен для TELEGRAM_BOT_MODE=polling. "
+            "На PythonAnywhere используйте webhook-режим через FastAPI."
+        )
+
     if not settings.TELEGRAM_BOT_TOKEN:
         raise RuntimeError(
             "TELEGRAM_BOT_TOKEN не задан. Добавьте токен в .env."
@@ -567,6 +574,7 @@ async def run() -> None:
             BotCommand(command="unlink", description="Управление привязкой"),
         ]
     )
+    await bot.delete_webhook(drop_pending_updates=False)
 
     dispatcher = Dispatcher()
     dispatcher.include_router(
