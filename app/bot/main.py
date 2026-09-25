@@ -260,7 +260,13 @@ def build_router(
                 driver = await backend.get_driver(driver_id)
             except BackendError as exc:
                 logger.warning("Start: backend lookup failed: %s", exc)
-                driver = None
+                await message.answer(
+                    "<b>Fleet Hub</b>\n\n"
+                    "Бот работает, но данные водителя временно недоступны. "
+                    "Привязка сохранена, попробуйте обновить позже.",
+                    reply_markup=main_keyboard(),
+                )
+                return
 
             if driver:
                 await send_home(
