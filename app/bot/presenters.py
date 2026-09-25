@@ -22,6 +22,7 @@ PAYMENT_TITLES = {
 CATEGORY_TITLES = {
     "econom": "Эконом",
     "comfort": "Комфорт",
+    "comfort_plus": "Комфорт+",
     "business": "Бизнес",
 }
 
@@ -62,32 +63,32 @@ def driver_profile_text(
     tariffs = ", ".join(driver.get("tariffs") or []) or "—"
 
     lines = [
-        "<b>👤 Профиль водителя</b>",
+        "<b>Профиль водителя</b>",
         "",
         f"<b>{esc(name)}</b>",
-        f"📱 {esc(driver.get('phone'))}",
-        f"🟢 Статус: {esc(driver.get('work_rule') or driver.get('status'))}",
-        f"⭐ Рейтинг: {esc(driver.get('rating'))}",
-        f"🏅 Приоритет: {esc(driver.get('priority_points'))}",
-        f"💰 Баланс: {money(driver.get('balance'))} {esc(driver.get('currency') or 'KGS')}",
-        f"🎯 Тарифы: {esc(tariffs)}",
+        f"Телефон: {esc(driver.get('phone'))}",
+        f"Статус: {esc(driver.get('work_rule') or driver.get('status'))}",
+        f"Рейтинг: {esc(driver.get('rating'))}",
+        f"Приоритет: {esc(driver.get('priority_points'))}",
+        f"Баланс: {money(driver.get('balance'))} {esc(driver.get('currency') or 'KGS')}",
+        f"Тарифы: {esc(tariffs)}",
         "",
-        "<b>🚕 Автомобиль</b>",
+        "<b>Автомобиль</b>",
         f"{esc(vehicle.get('brand'))} {esc(vehicle.get('model'))}, {esc(vehicle.get('year'))}",
-        f"🎨 {esc(vehicle.get('color'))}",
-        f"🔢 {esc(vehicle.get('plate'))}",
+        f"Цвет: {esc(vehicle.get('color'))}",
+        f"Госномер: {esc(vehicle.get('plate'))}",
     ]
 
     if summary:
         lines.extend(
             [
                 "",
-                "<b>📊 Текущая статистика</b>",
-                f"🟡 Активных: {esc(summary.get('active_orders'))}",
-                f"✅ Завершено: {esc(summary.get('completed_orders'))}",
-                f"❌ Отменено: {esc(summary.get('cancelled_orders'))}",
-                f"💵 Заработок: {money(summary.get('earnings'))} {esc(summary.get('currency') or 'KGS')}",
-                f"🛣 Пройдено: {esc(summary.get('distance_km'))} км",
+                "<b>Текущая статистика</b>",
+                f"Активных: {esc(summary.get('active_orders'))}",
+                f"Завершено: {esc(summary.get('completed_orders'))}",
+                f"Отменено: {esc(summary.get('cancelled_orders'))}",
+                f"Заработок: {money(summary.get('earnings'))} {esc(summary.get('currency') or 'KGS')}",
+                f"Пройдено: {esc(summary.get('distance_km'))} км",
             ]
         )
 
@@ -97,14 +98,14 @@ def driver_profile_text(
 def stats_text(summary: dict[str, Any]) -> str:
     return "\n".join(
         [
-            "<b>📊 Статистика водителя</b>",
+            "<b>Статистика водителя</b>",
             "",
-            f"📦 Всего заказов: {esc(summary.get('orders_total'))}",
-            f"🟡 Активных: {esc(summary.get('active_orders'))}",
-            f"✅ Завершено: {esc(summary.get('completed_orders'))}",
-            f"❌ Отменено: {esc(summary.get('cancelled_orders'))}",
-            f"💵 Заработок: {money(summary.get('earnings'))} {esc(summary.get('currency') or 'KGS')}",
-            f"🛣 Дистанция: {esc(summary.get('distance_km'))} км",
+            f"Всего заказов: {esc(summary.get('orders_total'))}",
+            f"Активных: {esc(summary.get('active_orders'))}",
+            f"Завершено: {esc(summary.get('completed_orders'))}",
+            f"Отменено: {esc(summary.get('cancelled_orders'))}",
+            f"Заработок: {money(summary.get('earnings'))} {esc(summary.get('currency') or 'KGS')}",
+            f"Дистанция: {esc(summary.get('distance_km'))} км",
         ]
     )
 
@@ -120,21 +121,21 @@ def order_text(order: dict[str, Any]) -> str:
 
     return "\n".join(
         [
-            f"<b>🚕 Заказ {esc(order.get('id'))}</b>",
+            f"<b>Заказ {esc(order.get('id'))}</b>",
             "",
-            f"📌 Статус: <b>{esc(status_title)}</b>",
-            f"🏷 Тариф: {esc(category)}",
-            f"💳 Оплата: {esc(payment)}",
-            f"💰 Стоимость: <b>{money(order.get('price'))} {esc(order.get('currency') or 'KGS')}</b>",
+            f"Статус: <b>{esc(status_title)}</b>",
+            f"Тариф: {esc(category)}",
+            f"Оплата: {esc(payment)}",
+            f"Стоимость: <b>{money(order.get('price'))} {esc(order.get('currency') or 'KGS')}</b>",
             "",
-            f"🟢 Откуда: {esc(order.get('pickup') or order.get('pickup_address'))}",
-            f"🔴 Куда: {esc(order.get('destination') or order.get('destination_address'))}",
+            f"Откуда: {esc(order.get('pickup') or order.get('pickup_address'))}",
+            f"Куда: {esc(order.get('destination') or order.get('destination_address'))}",
             "",
-            f"🛣 Расстояние: {esc(order.get('distance_km'))} км",
-            f"⏱ Время: {esc(order.get('duration_minutes'))} мин",
-            f"🕒 Создан: {datetime_text(order.get('created_at') or order.get('yandex_created_at'))}",
-            f"▶️ Начат: {datetime_text(order.get('started_at'))}",
-            f"🏁 Завершён: {datetime_text(order.get('completed_at'))}",
+            f"Расстояние: {esc(order.get('distance_km'))} км",
+            f"Время: {esc(order.get('duration_minutes'))} мин",
+            f"Создан: {datetime_text(order.get('created_at') or order.get('yandex_created_at'))}",
+            f"Начат: {datetime_text(order.get('started_at'))}",
+            f"Завершён: {datetime_text(order.get('completed_at'))}",
         ]
     )
 
