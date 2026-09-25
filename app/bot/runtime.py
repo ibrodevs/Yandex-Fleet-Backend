@@ -79,7 +79,7 @@ class TelegramWebhookRuntime:
                     self.links,
                     mock_mode=self.settings.YANDEX_MOCK_MODE,
                     page_size=max(self.settings.TELEGRAM_BOT_ORDERS_PAGE_SIZE, 1),
-                    mini_app_url=self.settings.telegram_mini_app_url(),
+                    mini_app_url=self.settings.telegram_mini_app_url,
                 )
             )
             self._initialized = True
@@ -98,7 +98,7 @@ class TelegramWebhookRuntime:
         self.state.commands_error = None
 
     async def _configure_menu(self) -> None:
-        mini_app_url = self.settings.telegram_mini_app_url()
+        mini_app_url = self.settings.telegram_mini_app_url
         if not mini_app_url:
             self.state.menu_configured = False
             self.state.menu_error = "TELEGRAM_MINI_APP_URL не настроен."
