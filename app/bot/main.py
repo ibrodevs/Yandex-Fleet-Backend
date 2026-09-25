@@ -437,6 +437,10 @@ def build_router(
                 query.message,
                 "✅ Telegram отвязан от профиля водителя.",
             )
+            await query.message.answer(
+                "Чтобы привязать профиль снова, отправьте свой контакт.",
+                reply_markup=contact_keyboard(),
+            )
         await query.answer("Привязка удалена")
 
     @router.callback_query(F.data.startswith("orders:"))
