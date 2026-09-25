@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.marketplace.mock import list_mock_marketplace_orders
+from app.marketplace.mock import (
+    accept_mock_marketplace_order,
+    list_mock_marketplace_orders,
+)
 
 
 SOURCE_TITLES = {
@@ -78,3 +81,21 @@ def get_marketplace_summary(driver_id: str) -> dict[str, Any]:
             for key, title in SOURCE_TITLES.items()
         ],
     }
+
+
+def accept_marketplace_order(
+    order_id: str,
+    *,
+    driver_id: str,
+) -> dict[str, Any]:
+    try:
+        order = accept_mock_marketplace_order(
+            order_id,
+            driver_id=driver_id,
+        )
+    except ValueError as exc:
+        raise ValueError(str(exc)) from exc
+
+    if not order:
+        raise LookupError("Заказ не найден.")
+    return order
