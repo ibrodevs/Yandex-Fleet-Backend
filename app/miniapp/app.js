@@ -74,9 +74,17 @@
         ? "Ориентировочный расчёт"
         : "Цена агрегатора";
       const paymentIcon = order.payment_method === "cash" ? "cash" : "card";
+      const acceptButton = order.can_accept
+        ? `
+          <button class="btn btn-primary order-accept-btn" type="button" data-order-id="${escapeHtml(order.id)}">
+            ${icon("check")}
+            <span>Принять заказ</span>
+          </button>
+        `
+        : "";
 
       return `
-        <button class="order-card" type="button" data-order-id="${escapeHtml(order.id)}">
+        <article class="order-card" data-order-id="${escapeHtml(order.id)}">
           <div class="order-head">
             <div class="order-tags">
               <span class="pill pill-source">${escapeHtml(order.source_title)}</span>
@@ -111,12 +119,26 @@
             <span class="meta-item">${icon("clock")} ~${escapeHtml(order.duration_minutes)} мин</span>
             <span class="meta-item">${icon(paymentIcon)} ${paymentLabel(order.payment_method)}</span>
           </div>
-        </button>
+
+          <div class="order-actions">
+            <button class="btn btn-secondary order-details-btn" type="button" data-order-id="${escapeHtml(order.id)}">
+              <span>Подробнее</span>
+              ${icon("chevron")}
+            </button>
+            ${acceptButton}
+          </div>
+        </article>
       `;
     }).join("");
 
-    document.querySelectorAll(".order-card").forEach((card) => {
-      card.addEventListener("click", () => openOrder(card.dataset.orderId));
+    document.querySelectorAll(".order-details-btn").forEach((button) => {
+      button.addEventListener("click", () => openOrder(button.dataset.orderId));
+    });
+
+    document.querySelectorAll(".order-accept-btn").forEach((button) => {
+      button.addEventListener("click", async () => {
+        await acceptOrder(button.dataset.orderId, button);
+      });
     });
   }
 
@@ -177,6 +199,73 @@
     `;
   }
 
+  function apiRequestContext() {
+    const initData = tg?.initData || "";
+    return {
+      demo: !initData,
+      headers: initData ? { "X-Telegram-Init-Data": initData } : {},
+    };
+  }
+
+  async function confirmAccept() {
+    if (tg?.showConfirm) {
+      return await new Promise((resolve) => {
+        tg.showConfirm("Принять этот заказ?", resolve);
+      });
+    }
+    return window.confirm("Принять этот заказ?");
+  }
+
+  async function acceptOrder(orderId, button = null) {
+    const order = state.data?.orders.find((item) => item.id === orderId);
+    if (!order || !order.can_accept) return;
+
+    const confirmed = await confirmAccept();
+    if (!confirmed) return;
+
+    if (button) {
+      button.disabled = true;
+      button.classList.add("loading");
+    }
+
+    try {
+      const { demo, headers } = apiRequestContext();
+      const response = await fetch(
+        `/api/v1/miniapp/orders/${encodeURIComponent(orderId)}/accept?demo=${demo}`,
+        {
+          method: "POST",
+          headers,
+          cache: "no-store",
+        },
+      );
+
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(body.detail || `HTTP ${response.status}`);
+      }
+
+      state.data.orders = state.data.orders.map((item) =>
+        item.id === orderId ? body.order : item
+      );
+      state.data.summary = body.summary;
+
+      renderHeader();
+      renderOrders();
+      renderStats();
+      closeSheet();
+      showToast("Заказ принят");
+      tg?.HapticFeedback?.notificationOccurred("success");
+    } catch (error) {
+      showToast(error.message || "Не удалось принять заказ");
+      tg?.HapticFeedback?.notificationOccurred("error");
+    } finally {
+      if (button?.isConnected) {
+        button.disabled = false;
+        button.classList.remove("loading");
+      }
+    }
+  }
+
   function openOrder(orderId) {
     const order = state.data.orders.find((item) => item.id === orderId);
     if (!order) return;
@@ -199,6 +288,17 @@
           <div class="calc-line"><span>Коэффициент</span><strong>× ${escapeHtml(order.price_calculation.demand_multiplier)}</strong></div>
           <p class="disclaimer">Это демонстрационный расчёт. После подключения реального источника приоритет будет у цены, которую отдаёт агрегатор.</p>
         </section>
+      `
+      : "";
+
+    const acceptAction = order.can_accept
+      ? `
+        <div class="sheet-actions">
+          <button class="btn btn-primary btn-large sheet-accept-btn" type="button" data-order-id="${escapeHtml(order.id)}">
+            ${icon("check")}
+            <span>Принять заказ</span>
+          </button>
+        </div>
       `
       : "";
 
@@ -234,7 +334,15 @@
       </div>
 
       ${calculation}
+      ${acceptAction}
     `;
+
+    const sheetAccept = document.querySelector(".sheet-accept-btn");
+    if (sheetAccept) {
+      sheetAccept.addEventListener("click", async () => {
+        await acceptOrder(sheetAccept.dataset.orderId, sheetAccept);
+      });
+    }
 
     $("sheetBackdrop").classList.remove("hidden");
     tg?.HapticFeedback?.impactOccurred("light");
@@ -255,10 +363,9 @@
   async function load() {
     $("refreshButton").classList.add("loading");
     try {
-      const initData = tg?.initData || "";
-      const demo = !initData;
+      const { demo, headers } = apiRequestContext();
       const response = await fetch(`/api/v1/miniapp/bootstrap?demo=${demo}`, {
-        headers: initData ? { "X-Telegram-Init-Data": initData } : {},
+        headers,
         cache: "no-store",
       });
 
