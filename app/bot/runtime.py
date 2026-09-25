@@ -4,11 +4,10 @@ import asyncio
 import logging
 from dataclasses import dataclass
 
-from aiogram import Bot, Dispatcher
-from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode
+from aiogram import Dispatcher
 from aiogram.types import BotCommand, Update
 
+from app.bot.factory import create_bot
 from app.bot.main import build_router
 from app.bot.service import LocalBackendService
 from app.bot.storage import DriverLinkStore
@@ -38,9 +37,9 @@ class TelegramWebhookRuntime:
             raise RuntimeError("TELEGRAM_BOT_TOKEN не задан.")
 
         self.settings = settings
-        self.bot = Bot(
-            token=settings.TELEGRAM_BOT_TOKEN,
-            default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+        self.bot = create_bot(
+            settings.TELEGRAM_BOT_TOKEN,
+            http_proxy=settings.TELEGRAM_HTTP_PROXY,
         )
         self.dispatcher = Dispatcher()
         self.links = DriverLinkStore(settings.TELEGRAM_BOT_DB_PATH)
