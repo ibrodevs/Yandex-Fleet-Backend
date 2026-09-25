@@ -11,6 +11,8 @@ def test_miniapp_static_page_is_served():
     assert response.status_code == 200
     assert "Поступающие заказы" in response.text
     assert "telegram-web-app.js" in response.text
+    assert 'id="i-orders"' in response.text
+    assert "bottom-nav" in response.text
 
 
 def test_miniapp_demo_bootstrap(monkeypatch):
@@ -41,3 +43,11 @@ def test_miniapp_demo_can_be_disabled(monkeypatch):
         assert response.status_code == 403
     finally:
         get_settings.cache_clear()
+
+
+def test_miniapp_javascript_uses_svg_icons_without_emoji():
+    response = client.get("/miniapp/app.js")
+    assert response.status_code == 200
+    assert 'href="#i-' in response.text
+    for emoji in ("📍", "⏱", "💵", "💳", "⭐", "🚕", "📊", "👤"):
+        assert emoji not in response.text
