@@ -7,8 +7,16 @@ REPO_DIR="/home/${USERNAME}/Yandex-Fleet-Backend"
 VENV_DIR="/home/${USERNAME}/.virtualenvs/yandex-fleet"
 ENV_TEMPLATE="${REPO_DIR}/.env.pythonanywhere.yandexfeetbackend21.example"
 ENV_FILE="${REPO_DIR}/.env"
+PYTHON_BIN="/usr/local/bin/python3.12"
 
 echo "==> Deploy target: https://${DOMAIN}"
+
+if [ ! -x "${PYTHON_BIN}" ]; then
+  echo "ERROR: Python 3.12 is not available at ${PYTHON_BIN}."
+  echo "On PythonAnywhere open Account -> System image and switch to 'innit',"
+  echo "then start a fresh Bash console and run this script again."
+  exit 4
+fi
 
 if [ ! -d "${REPO_DIR}/.git" ]; then
   cd "/home/${USERNAME}"
@@ -19,7 +27,7 @@ else
 fi
 
 if [ ! -x "${VENV_DIR}/bin/python" ]; then
-  python3.12 -m venv "${VENV_DIR}"
+  "${PYTHON_BIN}" -m venv "${VENV_DIR}"
 fi
 
 source "${VENV_DIR}/bin/activate"
