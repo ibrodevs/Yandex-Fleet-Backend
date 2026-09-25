@@ -4,7 +4,7 @@ from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from app.marketplace.pricing import estimate_price
+from app.marketplace.pricing import estimate_price_details
 
 
 _NOW = datetime.now(timezone.utc)
@@ -176,18 +176,21 @@ def list_mock_marketplace_orders() -> list[dict[str, Any]]:
         item = deepcopy(raw)
         exact_price = item.pop("source_price")
         estimated = exact_price is None
-        price = (
-            estimate_price(
+        calculation = None
+        if estimated:
+            calculation = estimate_price_details(
                 source=item["source"],
                 tariff=item["tariff"],
                 distance_km=float(item["distance_km"]),
                 duration_minutes=int(item["duration_minutes"]),
                 demand_multiplier=float(item.get("demand_multiplier") or 1.0),
             )
-            if estimated
-            else float(exact_price)
-        )
+            price = float(calculation["total"])
+        else:
+            price = float(exact_price)
+
         item["price"] = price
+        item["price_calculation"] = calculation
         item["currency"] = "KGS"
         item["price_is_estimated"] = estimated
         item["price_label"] = (
