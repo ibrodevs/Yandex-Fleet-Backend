@@ -7,7 +7,11 @@ from fastapi import APIRouter, Header, HTTPException, Query
 from app.bot.storage import DriverLinkStore
 from app.config import get_settings
 from app.miniapp.auth import MiniAppAuthError, validate_telegram_init_data
-from app.marketplace import get_marketplace_order, get_marketplace_summary
+from app.marketplace import (
+    accept_marketplace_order,
+    get_marketplace_order,
+    get_marketplace_summary,
+)
 from app.marketplace.service import list_marketplace_orders
 from app.services.fleet import FleetProviderError, get_fleet_provider
 
@@ -118,3 +122,44 @@ async def miniapp_order(
     if not order:
         raise HTTPException(status_code=404, detail="Заказ не найден.")
     return order
+
+
+@router.post("/orders/{order_id}/accept")
+async def miniapp_accept_order(
+    order_id: str,
+    demo: bool = Query(default=False),
+    x_telegram_init_data: str | None = Header(
+        default=None,
+        alias="X-Telegram-Init-Data",
+    ),
+) -> dict[str, Any]:
+    settings = get_settings()
+    driver_id, _, _ = await _resolve_driver_id(
+        init_data=x_telegram_init_data,
+        demo=demo,
+    )
+
+    if not settings.YANDEX_MOCK_MODE:
+        raise HTTPException(
+            status_code=501,
+            detail=(
+                "Принятие заказа доступно только в demo-режиме, "
+                "пока не подключён официальный API агрегатора."
+            ),
+        )
+
+    try:
+        order = accept_marketplace_order(
+            order_id,
+            driver_id=driver_id,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    return {
+        "ok": True,
+        "order": order,
+        "summary": get_marketplace_summary(driver_id),
+    }
