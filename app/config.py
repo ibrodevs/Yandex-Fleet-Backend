@@ -21,9 +21,11 @@ class Settings(BaseSettings):
         description="JWT secret key",
     )
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
 
-    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/yandex_driver"
+    DATABASE_URL: str = (
+        "postgresql+asyncpg://postgres:postgres@localhost:5432/yandex_driver"
+    )
     DATABASE_ECHO: bool = False
 
     REDIS_URL: str = "redis://localhost:6379/0"
@@ -32,6 +34,11 @@ class Settings(BaseSettings):
     YANDEX_CLIENT_ID: str | None = None
     YANDEX_API_KEY: str | None = None
     YANDEX_PARK_ID: str | None = None
+    YANDEX_MOCK_MODE: bool = True
+
+    TELEGRAM_BOT_TOKEN: str | None = None
+    TELEGRAM_BOT_BACKEND_URL: str = "http://127.0.0.1:8000"
+    TELEGRAM_BOT_REQUEST_TIMEOUT_SECONDS: float = 10.0
 
     ORDER_SYNC_INTERVAL_SECONDS: int = 10
     DRIVER_SYNC_INTERVAL_SECONDS: int = 300
