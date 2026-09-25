@@ -16,11 +16,11 @@ from app.config import get_settings
 logger = logging.getLogger(__name__)
 
 BOT_COMMANDS = [
-    BotCommand(command="start", description="Открыть бота"),
+    BotCommand(command="start", description="Открыть кабинет"),
+    BotCommand(command="app", description="Парковое приложение"),
     BotCommand(command="profile", description="Профиль водителя"),
     BotCommand(command="orders", description="Заказы"),
     BotCommand(command="stats", description="Статистика"),
-    BotCommand(command="app", description="Парковое приложение"),
     BotCommand(command="unlink", description="Управление привязкой"),
 ]
 
@@ -28,7 +28,11 @@ BOT_COMMANDS = [
 @dataclass(slots=True)
 class WebhookState:
     configured: bool = False
+    commands_configured: bool = False
+    menu_configured: bool = False
     last_error: str | None = None
+    commands_error: str | None = None
+    menu_error: str | None = None
 
 
 class TelegramWebhookRuntime:
@@ -56,6 +60,11 @@ class TelegramWebhookRuntime:
         return f"{base}{path}"
 
     async def initialize(self) -> None:
+        """Initialize only local state.
+
+        No Telegram network request is allowed here. This keeps webhook update
+        processing available even when optional Telegram setup calls fail.
+        """
         if self._initialized:
             return
 
@@ -73,16 +82,43 @@ class TelegramWebhookRuntime:
                     mini_app_url=self.settings.telegram_mini_app_url(),
                 )
             )
-            await self.bot.set_my_commands(BOT_COMMANDS)
-            mini_app_url = self.settings.telegram_mini_app_url()
-            if mini_app_url:
-                await self.bot.set_chat_menu_button(
-                    menu_button=MenuButtonWebApp(
-                        text="🚖 Приложение",
-                        web_app=WebAppInfo(url=mini_app_url),
-                    )
-                )
             self._initialized = True
+            logger.info("Telegram dispatcher initialized locally")
+
+    async def _configure_commands(self) -> None:
+        try:
+            await self.bot.set_my_commands(BOT_COMMANDS)
+        except Exception as exc:
+            self.state.commands_configured = False
+            self.state.commands_error = str(exc)
+            logger.warning("Telegram commands setup failed: %s", exc)
+            return
+
+        self.state.commands_configured = True
+        self.state.commands_error = None
+
+    async def _configure_menu(self) -> None:
+        mini_app_url = self.settings.telegram_mini_app_url()
+        if not mini_app_url:
+            self.state.menu_configured = False
+            self.state.menu_error = "TELEGRAM_MINI_APP_URL не настроен."
+            return
+
+        try:
+            await self.bot.set_chat_menu_button(
+                menu_button=MenuButtonWebApp(
+                    text="Приложение",
+                    web_app=WebAppInfo(url=mini_app_url),
+                )
+            )
+        except Exception as exc:
+            self.state.menu_configured = False
+            self.state.menu_error = str(exc)
+            logger.warning("Telegram Mini App menu setup failed: %s", exc)
+            return
+
+        self.state.menu_configured = True
+        self.state.menu_error = None
 
     async def configure_webhook(self) -> None:
         await self.initialize()
@@ -98,6 +134,8 @@ class TelegramWebhookRuntime:
             raise RuntimeError(self.state.last_error)
 
         try:
+            # Webhook is the critical operation. Optional UI setup below must
+            # never prevent the bot from receiving /start and other updates.
             await self.bot.set_webhook(
                 url=self.webhook_url,
                 secret_token=self.settings.TELEGRAM_WEBHOOK_SECRET,
@@ -107,15 +145,21 @@ class TelegramWebhookRuntime:
         except Exception as exc:
             self.state.configured = False
             self.state.last_error = str(exc)
+            logger.exception("Telegram webhook setup failed")
             raise
 
         self.state.configured = True
         self.state.last_error = None
         logger.info("Telegram webhook configured: %s", self.webhook_url)
 
+        # These are best-effort presentation settings.
+        await self._configure_commands()
+        await self._configure_menu()
+
     async def process_update(self, payload: dict) -> None:
         await self.initialize()
         update = Update.model_validate(payload, context={"bot": self.bot})
+        logger.info("Processing Telegram update id=%s", update.update_id)
         await self.dispatcher.feed_update(self.bot, update)
 
     async def remote_status(self) -> dict:
@@ -139,10 +183,12 @@ _runtime_lock = asyncio.Lock()
 async def get_webhook_runtime() -> TelegramWebhookRuntime:
     global _runtime
     if _runtime is not None:
+        await _runtime.initialize()
         return _runtime
 
     async with _runtime_lock:
         if _runtime is None:
-            _runtime = TelegramWebhookRuntime()
-            await _runtime.initialize()
+            runtime = TelegramWebhookRuntime()
+            await runtime.initialize()
+            _runtime = runtime
         return _runtime
