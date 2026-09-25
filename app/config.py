@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     TELEGRAM_BOT_REQUEST_TIMEOUT_SECONDS: float = 10.0
     TELEGRAM_BOT_DB_PATH: str = ".data/telegram_bot.sqlite3"
     TELEGRAM_BOT_ORDERS_PAGE_SIZE: int = 5
+    TELEGRAM_BOT_MODE: str = "polling"
+    TELEGRAM_WEBHOOK_BASE_URL: str = ""
+    TELEGRAM_WEBHOOK_PATH: str = "/api/v1/telegram/webhook"
+    TELEGRAM_WEBHOOK_SECRET: str | None = None
+    TELEGRAM_WEBHOOK_AUTO_SETUP: bool = True
 
     ORDER_SYNC_INTERVAL_SECONDS: int = 10
     DRIVER_SYNC_INTERVAL_SECONDS: int = 300
