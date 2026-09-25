@@ -6,13 +6,12 @@ import logging
 from typing import Any
 
 from aiogram import Bot, Dispatcher, F, Router
-from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, CommandStart
 from aiogram.types import BotCommand, CallbackQuery, Message
 
 from app.bot.client import BackendClient, BackendError
+from app.bot.factory import create_bot
 from app.bot.keyboards import (
     binding_keyboard,
     confirm_unlink_keyboard,
@@ -561,9 +560,9 @@ async def run() -> None:
     links = DriverLinkStore(settings.TELEGRAM_BOT_DB_PATH)
     await links.init()
 
-    bot = Bot(
-        token=settings.TELEGRAM_BOT_TOKEN,
-        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    bot = create_bot(
+        settings.TELEGRAM_BOT_TOKEN,
+        http_proxy=settings.TELEGRAM_HTTP_PROXY,
     )
     await bot.set_my_commands(
         [
