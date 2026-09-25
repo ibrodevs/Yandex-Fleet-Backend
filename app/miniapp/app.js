@@ -8,10 +8,10 @@
   };
 
   const $ = (id) => document.getElementById(id);
-  const money = (value) => \`\${Math.round(Number(value || 0))} сом\`;
+  const money = (value) => `${Math.round(Number(value || 0))} сом`;
 
   function icon(name, className = "icon") {
-    return \`<svg class="\${className}" aria-hidden="true"><use href="#i-\${name}"></use></svg>\`;
+    return `<svg class="${className}" aria-hidden="true"><use href="#i-${name}"></use></svg>`;
   }
 
   function escapeHtml(value) {
@@ -68,51 +68,51 @@
 
     $("ordersList").innerHTML = orders.map((order) => {
       const price = order.price_is_estimated
-        ? \`≈ \${money(order.price)}\`
+        ? `≈ ${money(order.price)}`
         : money(order.price);
       const caption = order.price_is_estimated
         ? "Ориентировочный расчёт"
         : "Цена агрегатора";
       const paymentIcon = order.payment_method === "cash" ? "cash" : "card";
 
-      return \`
-        <button class="order-card" type="button" data-order-id="\${escapeHtml(order.id)}">
+      return `
+        <button class="order-card" type="button" data-order-id="${escapeHtml(order.id)}">
           <div class="order-head">
             <div class="order-tags">
-              <span class="pill pill-source">\${escapeHtml(order.source_title)}</span>
-              <span class="pill pill-neutral">\${escapeHtml(order.tariff_title)}</span>
-              <span class="pill \${statusPillClass(order.status)}">\${escapeHtml(order.status_title)}</span>
+              <span class="pill pill-source">${escapeHtml(order.source_title)}</span>
+              <span class="pill pill-neutral">${escapeHtml(order.tariff_title)}</span>
+              <span class="pill ${statusPillClass(order.status)}">${escapeHtml(order.status_title)}</span>
             </div>
             <div class="price-block">
-              <div class="order-price">\${price}</div>
-              <div class="price-caption">\${caption}</div>
+              <div class="order-price">${price}</div>
+              <div class="price-caption">${caption}</div>
             </div>
           </div>
 
           <div class="route-list">
             <div class="route-row">
-              \${icon("pin")}
+              ${icon("pin")}
               <div>
                 <strong>Откуда</strong>
-                <span>\${escapeHtml(order.pickup_address)}</span>
+                <span>${escapeHtml(order.pickup_address)}</span>
               </div>
             </div>
             <div class="route-row">
-              \${icon("flag")}
+              ${icon("flag")}
               <div>
                 <strong>Куда</strong>
-                <span>\${escapeHtml(order.destination_address)}</span>
+                <span>${escapeHtml(order.destination_address)}</span>
               </div>
             </div>
           </div>
 
           <div class="order-meta">
-            <span class="meta-item">\${icon("route")} \${escapeHtml(order.distance_km)} км</span>
-            <span class="meta-item">\${icon("clock")} ~\${escapeHtml(order.duration_minutes)} мин</span>
-            <span class="meta-item">\${icon(paymentIcon)} \${paymentLabel(order.payment_method)}</span>
+            <span class="meta-item">${icon("route")} ${escapeHtml(order.distance_km)} км</span>
+            <span class="meta-item">${icon("clock")} ~${escapeHtml(order.duration_minutes)} мин</span>
+            <span class="meta-item">${icon(paymentIcon)} ${paymentLabel(order.payment_method)}</span>
           </div>
         </button>
-      \`;
+      `;
     }).join("");
 
     document.querySelectorAll(".order-card").forEach((card) => {
@@ -121,12 +121,12 @@
   }
 
   function statRow(iconName, title, value) {
-    return \`
+    return `
       <div class="stat-row">
-        <span class="stat-label">\${icon(iconName)} \${escapeHtml(title)}</span>
-        <strong>\${escapeHtml(value)}</strong>
+        <span class="stat-label">${icon(iconName)} ${escapeHtml(title)}</span>
+        <strong>${escapeHtml(value)}</strong>
       </div>
-    \`;
+    `;
   }
 
   function renderStats() {
@@ -146,12 +146,12 @@
   }
 
   function profileRow(iconName, title, value) {
-    return \`
+    return `
       <div class="profile-row">
-        <span class="profile-label">\${icon(iconName)} \${escapeHtml(title)}</span>
-        <strong>\${escapeHtml(value)}</strong>
+        <span class="profile-label">${icon(iconName)} ${escapeHtml(title)}</span>
+        <strong>${escapeHtml(value)}</strong>
       </div>
-    \`;
+    `;
   }
 
   function renderProfile() {
@@ -159,22 +159,22 @@
     const v = d.vehicle || {};
     const car = [v.brand, v.model].filter(Boolean).join(" ") || "—";
 
-    $("profileCard").innerHTML = \`
+    $("profileCard").innerHTML = `
       <div class="profile-hero">
-        <div class="profile-avatar">\${icon("user")}</div>
+        <div class="profile-avatar">${icon("user")}</div>
         <div>
-          <h2>\${escapeHtml(d.full_name || "Водитель")}</h2>
-          <p>\${escapeHtml(d.phone || "")}</p>
+          <h2>${escapeHtml(d.full_name || "Водитель")}</h2>
+          <p>${escapeHtml(d.phone || "")}</p>
         </div>
       </div>
-      \${profileRow("shield", "Статус", d.work_rule || d.status || "—")}
-      \${profileRow("star", "Рейтинг", d.rating ?? "—")}
-      \${profileRow("trending", "Приоритет", d.priority_points ?? "—")}
-      \${profileRow("card", "Баланс", money(d.balance))}
-      \${profileRow("car", "Автомобиль", car)}
-      \${profileRow("car", "Госномер", v.plate || "—")}
-      \${profileRow("orders", "Тарифы", (d.tariffs || []).join(", ") || "—")}
-    \`;
+      ${profileRow("shield", "Статус", d.work_rule || d.status || "—")}
+      ${profileRow("star", "Рейтинг", d.rating ?? "—")}
+      ${profileRow("trending", "Приоритет", d.priority_points ?? "—")}
+      ${profileRow("card", "Баланс", money(d.balance))}
+      ${profileRow("car", "Автомобиль", car)}
+      ${profileRow("car", "Госномер", v.plate || "—")}
+      ${profileRow("orders", "Тарифы", (d.tariffs || []).join(", ") || "—")}
+    `;
   }
 
   function openOrder(orderId) {
@@ -182,7 +182,7 @@
     if (!order) return;
 
     const price = order.price_is_estimated
-      ? \`≈ \${money(order.price)}\`
+      ? `≈ ${money(order.price)}`
       : money(order.price);
     const priceKind = order.price_is_estimated
       ? "Ориентировочный расчёт"
@@ -190,51 +190,51 @@
     const paymentIcon = order.payment_method === "cash" ? "cash" : "card";
 
     const calculation = order.price_is_estimated && order.price_calculation
-      ? \`
+      ? `
         <section class="sheet-section">
           <div class="sheet-section-title">Расчёт цены</div>
-          <div class="calc-line"><span>Базовая часть</span><strong>\${money(order.price_calculation.base)}</strong></div>
-          <div class="calc-line"><span>Расстояние</span><strong>\${money(order.price_calculation.distance_part)}</strong></div>
-          <div class="calc-line"><span>Время</span><strong>\${money(order.price_calculation.time_part)}</strong></div>
-          <div class="calc-line"><span>Коэффициент</span><strong>× \${escapeHtml(order.price_calculation.demand_multiplier)}</strong></div>
+          <div class="calc-line"><span>Базовая часть</span><strong>${money(order.price_calculation.base)}</strong></div>
+          <div class="calc-line"><span>Расстояние</span><strong>${money(order.price_calculation.distance_part)}</strong></div>
+          <div class="calc-line"><span>Время</span><strong>${money(order.price_calculation.time_part)}</strong></div>
+          <div class="calc-line"><span>Коэффициент</span><strong>× ${escapeHtml(order.price_calculation.demand_multiplier)}</strong></div>
           <p class="disclaimer">Это демонстрационный расчёт. После подключения реального источника приоритет будет у цены, которую отдаёт агрегатор.</p>
         </section>
-      \`
+      `
       : "";
 
-    $("sheetContent").innerHTML = \`
+    $("sheetContent").innerHTML = `
       <div class="sheet-title">
         <div class="order-tags">
-          <span class="pill pill-source">\${escapeHtml(order.source_title)}</span>
-          <span class="pill pill-neutral">\${escapeHtml(order.tariff_title)}</span>
-          <span class="pill \${statusPillClass(order.status)}">\${escapeHtml(order.status_title)}</span>
+          <span class="pill pill-source">${escapeHtml(order.source_title)}</span>
+          <span class="pill pill-neutral">${escapeHtml(order.tariff_title)}</span>
+          <span class="pill ${statusPillClass(order.status)}">${escapeHtml(order.status_title)}</span>
         </div>
-        <h2>\${price}</h2>
-        <p>\${priceKind}</p>
+        <h2>${price}</h2>
+        <p>${priceKind}</p>
       </div>
 
       <section class="sheet-section">
         <div class="route-list">
           <div class="route-row">
-            \${icon("pin")}
-            <div><strong>Откуда</strong><span>\${escapeHtml(order.pickup_address)}</span></div>
+            ${icon("pin")}
+            <div><strong>Откуда</strong><span>${escapeHtml(order.pickup_address)}</span></div>
           </div>
           <div class="route-row">
-            \${icon("flag")}
-            <div><strong>Куда</strong><span>\${escapeHtml(order.destination_address)}</span></div>
+            ${icon("flag")}
+            <div><strong>Куда</strong><span>${escapeHtml(order.destination_address)}</span></div>
           </div>
         </div>
       </section>
 
       <div class="sheet-grid">
-        <div class="sheet-metric"><span>Расстояние</span><strong>\${escapeHtml(order.distance_km)} км</strong></div>
-        <div class="sheet-metric"><span>Время</span><strong>~\${escapeHtml(order.duration_minutes)} мин</strong></div>
-        <div class="sheet-metric"><span>Оплата</span><strong>\${icon(paymentIcon)} \${paymentLabel(order.payment_method)}</strong></div>
-        <div class="sheet-metric"><span>Статус</span><strong>\${escapeHtml(order.status_title)}</strong></div>
+        <div class="sheet-metric"><span>Расстояние</span><strong>${escapeHtml(order.distance_km)} км</strong></div>
+        <div class="sheet-metric"><span>Время</span><strong>~${escapeHtml(order.duration_minutes)} мин</strong></div>
+        <div class="sheet-metric"><span>Оплата</span><strong>${icon(paymentIcon)} ${paymentLabel(order.payment_method)}</strong></div>
+        <div class="sheet-metric"><span>Статус</span><strong>${escapeHtml(order.status_title)}</strong></div>
       </div>
 
-      \${calculation}
-    \`;
+      ${calculation}
+    `;
 
     $("sheetBackdrop").classList.remove("hidden");
     tg?.HapticFeedback?.impactOccurred("light");
@@ -257,14 +257,14 @@
     try {
       const initData = tg?.initData || "";
       const demo = !initData;
-      const response = await fetch(\`/api/v1/miniapp/bootstrap?demo=\${demo}\`, {
+      const response = await fetch(`/api/v1/miniapp/bootstrap?demo=${demo}`, {
         headers: initData ? { "X-Telegram-Init-Data": initData } : {},
         cache: "no-store",
       });
 
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
-        throw new Error(body.detail || \`HTTP \${response.status}\`);
+        throw new Error(body.detail || `HTTP ${response.status}`);
       }
 
       state.data = await response.json();
