@@ -1,3 +1,19 @@
+# Current deployment account
+
+```text
+PythonAnywhere username: yandexfeetbackend21
+Public domain: https://yandexfeetbackend21.pythonanywhere.com
+Repository path: /home/yandexfeetbackend21/Yandex-Fleet-Backend
+Virtualenv: /home/yandexfeetbackend21/.virtualenvs/yandex-fleet
+Webhook: https://yandexfeetbackend21.pythonanywhere.com/api/v1/telegram/webhook
+```
+
+A ready deployment helper is included:
+
+```bash
+bash ~/Yandex-Fleet-Backend/deploy/pythonanywhere_setup.sh
+```
+
 # PythonAnywhere deployment
 
 This project is prepared for PythonAnywhere as one FastAPI ASGI web app.
@@ -48,7 +64,7 @@ git pull origin main
 ## 3. Virtual environment
 
 ```bash
-python3.12 -m venv ~/.virtualenvs/yandex-fleet
+/usr/local/bin/python3.12 -m venv ~/.virtualenvs/yandex-fleet
 source ~/.virtualenvs/yandex-fleet/bin/activate
 python -m pip install --upgrade pip
 pip install -r ~/Yandex-Fleet-Backend/requirements.txt
