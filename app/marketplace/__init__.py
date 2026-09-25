@@ -1,5 +1,6 @@
 from app.marketplace.service import (
     accept_marketplace_order,
+    complete_marketplace_order,
     get_marketplace_order,
     get_marketplace_summary,
     list_marketplace_orders,
@@ -7,6 +8,7 @@ from app.marketplace.service import (
 
 __all__ = [
     "accept_marketplace_order",
+    "complete_marketplace_order",
     "get_marketplace_order",
     "get_marketplace_summary",
     "list_marketplace_orders",
