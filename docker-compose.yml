@@ -1,0 +1,55 @@
+version: "3.9"
+
+services:
+  api:
+    build: .
+    container_name: yandex-fleet-api
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    depends_on:
+      - postgres
+      - redis
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: yandex-fleet-postgres
+    environment:
+      POSTGRES_DB: yandex_driver
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: yandex-fleet-redis
+    ports:
+      - "6379:6379"
+
+  worker:
+    build: .
+    container_name: yandex-fleet-worker
+    command: python -m celery -A app.worker worker --loglevel=info
+    env_file:
+      - .env
+    depends_on:
+      - postgres
+      - redis
+
+  scheduler:
+    build: .
+    container_name: yandex-fleet-scheduler
+    command: python -m celery -A app.worker beat --loglevel=info
+    env_file:
+      - .env
+    depends_on:
+      - postgres
+      - redis
+
+volumes:
+  postgres_data:

@@ -1,0 +1,53 @@
+[project]
+name = "yandex-fleet-backend"
+version = "0.1.0"
+description = "Production-ready backend service for Yandex Fleet API integration"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.29.0",
+    "pydantic>=2.7.0",
+    "pydantic-settings>=2.2.0",
+    "sqlalchemy>=2.0.29",
+    "asyncpg>=0.29.0",
+    "alembic>=1.13.0",
+    "redis>=5.0.3",
+    "httpx>=0.27.0",
+    "pyjwt[crypto]>=2.8.0",
+    "bcrypt>=4.1.2",
+    "python-multipart>=0.0.9",
+    "greenlet>=3.0.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.1.1",
+    "pytest-asyncio>=0.23.6",
+    "ruff>=0.4.0",
+    "mypy>=1.9.0",
+    "aiosqlite>=0.20.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP", "B"]
+ignore = ["B008", "UP007", "E501"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = false
+warn_return_any = false
+warn_unused_configs = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
