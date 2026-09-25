@@ -211,6 +211,19 @@ def accept_mock_marketplace_order(
     *,
     driver_id: str,
 ) -> dict[str, Any] | None:
+    active_order = next(
+        (
+            raw
+            for raw in _RAW_OFFERS
+            if raw["driver_id"] == driver_id
+            and raw["status"] == "active"
+            and raw["id"] != order_id
+        ),
+        None,
+    )
+    if active_order is not None:
+        raise ValueError("Сначала завершите текущий активный заказ.")
+
     for raw in _RAW_OFFERS:
         if raw["id"] != order_id:
             continue
@@ -223,6 +236,7 @@ def accept_mock_marketplace_order(
         raw["status_title"] = "Активный"
         raw["expires_in_seconds"] = None
         raw["accepted_at"] = datetime.now(timezone.utc).isoformat()
+        raw["active_at"] = raw["accepted_at"]
 
         for item in list_mock_marketplace_orders():
             if item["id"] == order_id:
