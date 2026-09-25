@@ -1,55 +1,124 @@
 # Yandex Fleet Backend
 
-This project provides an MVP backend for integrating with the public Yandex Fleet API.
+Backend for Yandex Fleet integration plus a Telegram park bot.
 
-## What it does
+## Stage 1
 
-- Reads Yandex Fleet data for drivers, vehicles and orders
-- Stores normalized records in PostgreSQL
-- Applies order filter rules for each driver
-- Exposes REST API for frontend/mobile clients
-- Publishes real-time order events via WebSocket/Redis
-- Keeps order-offer actions isolated behind an explicit provider interface
+Stage 1 can already be tested **without Yandex Fleet credentials and without Docker**.
 
-## Architecture
+The mock mode provides:
 
-- FastAPI application
-- SQLAlchemy models and Alembic migrations
-- Redis-backed locks and pub/sub
-- Service layer for Yandex integration and filtering
+- test driver profiles;
+- test orders;
+- driver lookup by phone;
+- Telegram park bot;
+- profile and order screens in Telegram;
+- mock order completion;
+- a clean switch to the real Yandex integration later.
+
+The public Yandex Fleet API does not expose a documented generic method for
+completing a driver's real Yandex Pro order. Therefore completion is enabled
+only for mock orders at this stage.
 
 ## Requirements
 
 - Python 3.12+
-- PostgreSQL
-- Redis
-- Docker + Docker Compose
+- Telegram bot token from `@BotFather`
 
-## Environment setup
+PostgreSQL and Redis are **not required for the Stage 1 mock test**.
+They remain part of the later production architecture.
 
-Copy the example file and adjust credentials:
+## Run without Docker
+
+Clone and enter the repository:
+
+```bash
+git clone https://github.com/ibrodevs/Yandex-Fleet-Backend.git
+cd Yandex-Fleet-Backend
+```
+
+Create a virtual environment:
+
+```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
+```
+
+On Windows:
+
+```powershell
+py -3.12 -m venv .venv
+.venv\Scripts\activate
+```
+
+Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+Create `.env`:
 
 ```bash
 cp .env.example .env
 ```
 
-## Local run
+Set at least:
 
-```bash
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```env
+YANDEX_MOCK_MODE=true
+TELEGRAM_BOT_TOKEN=YOUR_BOTFATHER_TOKEN
+TELEGRAM_BOT_BACKEND_URL=http://127.0.0.1:8000
 ```
 
-## Docker run
+### Terminal 1 — backend
 
 ```bash
-docker compose up -d --build
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-## Migrations
+Check:
 
 ```bash
-alembic upgrade head
+curl http://127.0.0.1:8000/health
+curl http://127.0.0.1:8000/api/v1/drivers
+curl "http://127.0.0.1:8000/api/v1/orders?driver_id=driver-001"
 ```
+
+### Terminal 2 — Telegram bot
+
+Activate the same virtual environment and run:
+
+```bash
+python -m app.bot
+```
+
+Then open the bot in Telegram:
+
+```text
+/start
+/mocklogin
+```
+
+`/mocklogin` is available only while `YANDEX_MOCK_MODE=true`.
+
+Test driver:
+
+```text
+id: driver-001
+phone: +996555000001
+```
+
+The bot menu contains:
+
+```text
+👤 Профиль
+📦 Заказы
+🔄 Обновить
+🚪 Выйти
+```
+
+The active mock order also has a `Завершить заказ` button.
 
 ## Tests
 
@@ -57,36 +126,42 @@ alembic upgrade head
 pytest -q
 ```
 
-## Yandex credentials
+## Switching to real Yandex Fleet later
 
-Get them from your Yandex Fleet project setup or taxi park integration team:
+When the taxi park sends credentials:
 
-- YANDEX_CLIENT_ID
-- YANDEX_API_KEY
-- YANDEX_PARK_ID
+```env
+YANDEX_CLIENT_ID=...
+YANDEX_API_KEY=...
+YANDEX_PARK_ID=...
+```
 
-## Public Fleet API capabilities used
+we can connect the existing service layer to real Fleet data and then set:
 
-- orders read
-- drivers read
-- vehicles read
-- basic metadata access
+```env
+YANDEX_MOCK_MODE=false
+```
+
+The Telegram bot does not need to be redesigned: it already talks to the
+backend API instead of directly to Yandex.
+
+## Existing architecture
+
+- FastAPI
+- SQLAlchemy / Alembic
+- PostgreSQL
+- Redis
+- Yandex Fleet service layer
+- order filtering
+- Telegram bot
 
 ## Public Fleet API limitations
 
-The public API does not expose supported methods for:
+The public API does not expose supported generic methods for:
 
-- accept incoming offer
-- reject incoming offer
-- skip without activity loss
-- neutral skip behaviour in Yandex Activity
+- accepting an incoming Yandex Pro offer;
+- rejecting an incoming offer;
+- skipping an order without activity/priority impact;
+- completing a driver's real Yandex Pro order.
 
-This is intentionally isolated behind a provider abstraction and returns an explicit unsupported error instead of a fake success.
-
-## Example curl
-
-```bash
-curl http://localhost:8000/health
-curl http://localhost:8000/api/v1/orders
-curl http://localhost:8000/api/v1/integrations/yandex/status
-```
+Those actions must not return fake success in real mode.
