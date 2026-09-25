@@ -64,6 +64,16 @@
   }
 
   function renderOrders() {
+    const headings = {
+      incoming: ["Поступающие заказы", "Fasten, Яндекс и Везёт в одной ленте"],
+      active: ["Активный заказ", "Текущий заказ водителя"],
+      completed: ["Завершённые заказы", "История завершённых поездок"],
+      all: ["Все заказы", "Все статусы в одной ленте"],
+    };
+    const [title, subtitle] = headings[state.status] || headings.all;
+    $("ordersSectionTitle").textContent = title;
+    $("ordersSectionSubtitle").textContent = subtitle;
+
     const orders = filteredOrders();
     $("emptyState").classList.toggle("hidden", orders.length !== 0);
 
@@ -85,7 +95,7 @@
         : "";
       const completeButton = order.can_complete
         ? `
-          <button class="btn btn-primary order-complete-btn" type="button" data-order-id="${escapeHtml(order.id)}">
+          <button class="btn btn-success order-complete-btn" type="button" data-order-id="${escapeHtml(order.id)}">
             ${icon("check")}
             <span>Завершить заказ</span>
           </button>
@@ -272,7 +282,7 @@
       renderOrders();
       renderStats();
       closeSheet();
-      showToast("Заказ принят");
+      showToast("Заказ принят и стал активным");
       tg?.HapticFeedback?.notificationOccurred("success");
     } catch (error) {
       showToast(error.message || "Не удалось принять заказ");
@@ -384,7 +394,7 @@
     const completeAction = order.can_complete
       ? `
         <div class="sheet-actions">
-          <button class="btn btn-primary btn-large sheet-complete-btn" type="button" data-order-id="${escapeHtml(order.id)}">
+          <button class="btn btn-success btn-large sheet-complete-btn" type="button" data-order-id="${escapeHtml(order.id)}">
             ${icon("check")}
             <span>Завершить заказ</span>
           </button>
