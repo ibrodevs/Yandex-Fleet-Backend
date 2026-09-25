@@ -30,15 +30,15 @@ def main_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
             [
+                KeyboardButton(text="🚖 Приложение"),
+            ],
+            [
                 KeyboardButton(text="👤 Профиль"),
                 KeyboardButton(text="📦 Заказы"),
             ],
             [
                 KeyboardButton(text="📊 Статистика"),
                 KeyboardButton(text="🚕 Активный заказ"),
-            ],
-            [
-                KeyboardButton(text="🚖 Приложение"),
             ],
             [
                 KeyboardButton(text="🔄 Обновить"),
