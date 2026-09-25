@@ -8,6 +8,7 @@ from typing import Any
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, CommandStart
 from aiogram.types import CallbackQuery, Message
 
@@ -233,10 +234,16 @@ def build_router(
             await query.answer("Заказ не найден.", show_alert=True)
             return
         if query.message:
-            await query.message.edit_text(
-                _order_text(order),
-                reply_markup=order_keyboard(order),
-            )
+            try:
+                await query.message.edit_text(
+                    _order_text(order),
+                    reply_markup=order_keyboard(order),
+                )
+            except TelegramBadRequest as exc:
+                if "message is not modified" in str(exc).lower():
+                    await query.answer("Без изменений")
+                    return
+                raise
         await query.answer()
 
     @router.callback_query(F.data.startswith("complete:"))
