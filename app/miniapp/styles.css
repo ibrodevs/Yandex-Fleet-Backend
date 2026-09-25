@@ -288,6 +288,17 @@ h1 { margin: 3px 0 2px; color: var(--ink); font-size: 24px; font-weight: 700; le
   border-color: var(--blue-press);
   background: var(--blue-press);
 }
+.btn-success {
+  border: 1px solid var(--green);
+  background: var(--green);
+  color: #fff;
+}
+.btn-success:hover:not(:disabled) {
+  filter: brightness(1.04);
+}
+.btn-success:active:not(:disabled) {
+  filter: brightness(.94);
+}
 .btn-secondary {
   border: 1px solid var(--field-line);
   background: var(--surface);
