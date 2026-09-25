@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api.router import api_router
 from app.bot.runtime import get_webhook_runtime
@@ -59,6 +62,20 @@ app.add_middleware(
 )
 
 app.include_router(api_router)
+
+MINIAPP_DIR = Path(__file__).resolve().parent / "miniapp"
+
+
+@app.get("/miniapp", include_in_schema=False)
+async def miniapp_redirect() -> RedirectResponse:
+    return RedirectResponse(url="/miniapp/")
+
+
+app.mount(
+    "/miniapp",
+    StaticFiles(directory=str(MINIAPP_DIR), html=True),
+    name="miniapp",
+)
 
 
 @app.get("/health")
