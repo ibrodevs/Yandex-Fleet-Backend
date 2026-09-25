@@ -660,7 +660,7 @@ async def run() -> None:
             links,
             mock_mode=settings.YANDEX_MOCK_MODE,
             page_size=max(settings.TELEGRAM_BOT_ORDERS_PAGE_SIZE, 1),
-            mini_app_url=settings.telegram_mini_app_url(),
+            mini_app_url=settings.telegram_mini_app_url,
         )
     )
 
