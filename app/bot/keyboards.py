@@ -16,7 +16,7 @@ def contact_keyboard() -> ReplyKeyboardMarkup:
         keyboard=[
             [
                 KeyboardButton(
-                    text="📱 Поделиться номером",
+                    text="Поделиться номером",
                     request_contact=True,
                 )
             ]
@@ -29,20 +29,18 @@ def contact_keyboard() -> ReplyKeyboardMarkup:
 def main_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
+            [KeyboardButton(text="Приложение")],
             [
-                KeyboardButton(text="🚖 Приложение"),
+                KeyboardButton(text="Профиль"),
+                KeyboardButton(text="Заказы"),
             ],
             [
-                KeyboardButton(text="👤 Профиль"),
-                KeyboardButton(text="📦 Заказы"),
+                KeyboardButton(text="Статистика"),
+                KeyboardButton(text="Активный заказ"),
             ],
             [
-                KeyboardButton(text="📊 Статистика"),
-                KeyboardButton(text="🚕 Активный заказ"),
-            ],
-            [
-                KeyboardButton(text="🔄 Обновить"),
-                KeyboardButton(text="🔗 Привязка"),
+                KeyboardButton(text="Обновить"),
+                KeyboardButton(text="Привязка"),
             ],
         ],
         resize_keyboard=True,
@@ -54,7 +52,7 @@ def binding_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="❌ Отвязать Telegram",
+                    text="Отвязать Telegram",
                     callback_data="unlink:confirm",
                 )
             ]
@@ -84,7 +82,7 @@ def order_keyboard(order: dict[str, Any], page: int = 0) -> InlineKeyboardMarkup
     rows: list[list[InlineKeyboardButton]] = [
         [
             InlineKeyboardButton(
-                text="🔄 Обновить заказ",
+                text="Обновить заказ",
                 callback_data=f"order:{order_id}:{page}",
             )
         ]
@@ -94,7 +92,7 @@ def order_keyboard(order: dict[str, Any], page: int = 0) -> InlineKeyboardMarkup
         rows.append(
             [
                 InlineKeyboardButton(
-                    text="✅ Завершить заказ",
+                    text="Завершить заказ",
                     callback_data=f"complete:{order_id}:{page}",
                 )
             ]
@@ -103,7 +101,7 @@ def order_keyboard(order: dict[str, Any], page: int = 0) -> InlineKeyboardMarkup
     rows.append(
         [
             InlineKeyboardButton(
-                text="⬅️ К списку заказов",
+                text="К списку заказов",
                 callback_data=f"orders:{page}",
             )
         ]
@@ -137,7 +135,7 @@ def orders_keyboard(
     if page > 0:
         nav.append(
             InlineKeyboardButton(
-                text="⬅️",
+                text="Назад",
                 callback_data=f"orders:{page - 1}",
             )
         )
@@ -145,7 +143,7 @@ def orders_keyboard(
     if (page + 1) * page_size < total:
         nav.append(
             InlineKeyboardButton(
-                text="➡️",
+                text="Далее",
                 callback_data=f"orders:{page + 1}",
             )
         )
@@ -156,7 +154,7 @@ def orders_keyboard(
     rows.append(
         [
             InlineKeyboardButton(
-                text="🔄 Обновить список",
+                text="Обновить список",
                 callback_data=f"orders:{page}",
             )
         ]
@@ -170,7 +168,7 @@ def miniapp_keyboard(url: str) -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="🚖 Открыть парковое приложение",
+                    text="Открыть парковое приложение",
                     web_app=WebAppInfo(url=url),
                 )
             ]
