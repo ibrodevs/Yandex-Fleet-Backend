@@ -7,6 +7,7 @@ from aiogram.types import (
     InlineKeyboardMarkup,
     KeyboardButton,
     ReplyKeyboardMarkup,
+    WebAppInfo,
 )
 
 
@@ -35,6 +36,9 @@ def main_keyboard() -> ReplyKeyboardMarkup:
             [
                 KeyboardButton(text="📊 Статистика"),
                 KeyboardButton(text="🚕 Активный заказ"),
+            ],
+            [
+                KeyboardButton(text="🚖 Приложение"),
             ],
             [
                 KeyboardButton(text="🔄 Обновить"),
@@ -159,3 +163,16 @@ def orders_keyboard(
     )
 
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def miniapp_keyboard(url: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🚖 Открыть парковое приложение",
+                    web_app=WebAppInfo(url=url),
+                )
+            ]
+        ]
+    )
