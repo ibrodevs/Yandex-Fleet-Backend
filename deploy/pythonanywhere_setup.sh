@@ -52,7 +52,8 @@ fi
 echo "==> Running test suite"
 pytest -q
 
-COMMAND="/home/${USERNAME}/.virtualenvs/yandex-fleet/bin/uvicorn --app-dir /home/${USERNAME}/Yandex-Fleet-Backend --env-file /home/${USERNAME}/Yandex-Fleet-Backend/.env --uds ${DOMAIN_SOCKET} app.main:app"
+SOCKET_PLACEHOLDER='${DOMAIN_SOCKET}'
+COMMAND="/home/${USERNAME}/.virtualenvs/yandex-fleet/bin/uvicorn --app-dir /home/${USERNAME}/Yandex-Fleet-Backend --env-file /home/${USERNAME}/Yandex-Fleet-Backend/.env --uds ${SOCKET_PLACEHOLDER} app.main:app"
 
 if pa website get --domain "${DOMAIN}" >/dev/null 2>&1; then
   echo "==> Site already exists, reloading"
