@@ -149,12 +149,12 @@ def build_router(
         page: int,
     ) -> str:
         if not items:
-            return "<b>📦 Заказы</b>\n\nЗаказов пока нет."
+            return "<b>Заказы</b>\n\nЗаказов пока нет."
 
         start = page * page_size + 1
         end = start + len(items) - 1
         lines = [
-            "<b>📦 Заказы</b>",
+            "<b>Заказы</b>",
             f"Показаны {start}–{end} из {total}",
             "",
         ]
@@ -220,6 +220,35 @@ def build_router(
 
         return order
 
+    async def send_home(
+        message: Message,
+        driver: dict[str, Any],
+        *,
+        note: str | None = None,
+    ) -> None:
+        driver_name = html.escape(
+            str(driver.get("full_name") or driver.get("id") or "Водитель")
+        )
+        text = (
+            "<b>Fleet Hub</b>\n\n"
+            f"Водитель: <b>{driver_name}</b>\n"
+            "Парковый кабинет готов к работе."
+        )
+        if note:
+            text += f"\n\n{html.escape(note)}"
+
+        await message.answer(
+            text,
+            reply_markup=main_keyboard(),
+        )
+
+        if mini_app_url:
+            await message.answer(
+                "Откройте приложение, чтобы посмотреть поступающие заказы "
+                "Fasten, Яндекс и Везёт, тарифы и расчёт цены.",
+                reply_markup=miniapp_keyboard(mini_app_url),
+            )
+
     @router.message(CommandStart())
     async def start(message: Message) -> None:
         if not message.from_user:
@@ -229,29 +258,51 @@ def build_router(
         if driver_id:
             try:
                 driver = await backend.get_driver(driver_id)
-            except BackendError:
+            except BackendError as exc:
+                logger.warning("Start: backend lookup failed: %s", exc)
                 driver = None
 
             if driver:
-                await message.answer(
-                    "Привязка восстановлена после запуска бота.\n\n"
-                    f"Водитель: <b>{html.escape(str(driver.get('full_name') or driver_id))}</b>",
-                    reply_markup=main_keyboard(),
+                await send_home(
+                    message,
+                    driver,
+                    note="Привязка Telegram восстановлена.",
                 )
                 return
 
             await links.unlink(message.from_user.id)
 
-        extra = (
-            "\n\nДля разработки в mock-режиме доступна команда /mocklogin."
-            if mock_mode
-            else ""
-        )
+        if mock_mode:
+            try:
+                driver = await backend.get_driver("driver-001")
+            except BackendError as exc:
+                logger.exception("Start: failed to load mock driver")
+                await message.answer(
+                    "Бот запущен, но тестовый профиль временно недоступен. "
+                    f"Ошибка backend: {html.escape(str(exc))}"
+                )
+                return
+
+            if driver:
+                await links.link(
+                    telegram_user_id=message.from_user.id,
+                    driver_id=str(driver["id"]),
+                    phone=driver.get("phone"),
+                    username=message.from_user.username,
+                    first_name=message.from_user.first_name,
+                    last_name=message.from_user.last_name,
+                )
+                await send_home(
+                    message,
+                    driver,
+                    note="Для демонстрации подключён тестовый водитель.",
+                )
+                return
+
         await message.answer(
-            "<b>Парковый бот</b>\n\n"
-            "Для привязки нажмите кнопку ниже и отправьте свой номер Telegram. "
-            "Номер должен совпадать с номером в профиле водителя."
-            + extra,
+            "<b>Fleet Hub</b>\n\n"
+            "Для входа отправьте свой номер кнопкой ниже. "
+            "Номер должен совпадать с номером водителя в парке.",
             reply_markup=contact_keyboard(),
         )
 
@@ -279,11 +330,11 @@ def build_router(
             first_name=message.from_user.first_name,
             last_name=message.from_user.last_name,
         )
-        await message.answer(
-            "✅ Тестовый профиль привязан к вашему Telegram.",
-            reply_markup=main_keyboard(),
+        await send_home(
+            message,
+            driver,
+            note="Тестовый профиль подключён.",
         )
-        await send_profile(message, str(driver["id"]))
 
     @router.message(F.contact)
     async def contact_login(message: Message) -> None:
@@ -322,15 +373,14 @@ def build_router(
             last_name=message.from_user.last_name,
         )
 
-        await message.answer(
-            "✅ Telegram успешно привязан к профилю водителя. "
-            "Привязка сохранится после перезапуска бота.",
-            reply_markup=main_keyboard(),
+        await send_home(
+            message,
+            driver,
+            note="Telegram привязан к профилю. Привязка сохранится после перезапуска.",
         )
-        await send_profile(message, str(driver["id"]))
 
     @router.message(Command("app"))
-    @router.message(F.text == "🚖 Приложение")
+    @router.message(F.text == "Приложение")
     async def open_mini_app(message: Message) -> None:
         driver_id = await require_driver(message)
         if not driver_id:
@@ -342,21 +392,21 @@ def build_router(
             )
             return
         await message.answer(
-            "<b>🚖 Парковое приложение</b>\n\n"
+            "<b>Парковое приложение</b>\n\n"
             "Внутри собраны поступающие заказы Fasten, Яндекс и Везёт, "
             "тарифы, маршрут и цена или её примерный расчёт.",
             reply_markup=miniapp_keyboard(mini_app_url),
         )
 
     @router.message(Command("profile"))
-    @router.message(F.text == "👤 Профиль")
+    @router.message(F.text == "Профиль")
     async def profile(message: Message) -> None:
         driver_id = await require_driver(message)
         if driver_id:
             await send_profile(message, driver_id)
 
     @router.message(Command("stats"))
-    @router.message(F.text == "📊 Статистика")
+    @router.message(F.text == "Статистика")
     async def stats(message: Message) -> None:
         driver_id = await require_driver(message)
         if not driver_id:
@@ -372,13 +422,13 @@ def build_router(
         await message.answer(stats_text(summary), reply_markup=main_keyboard())
 
     @router.message(Command("orders"))
-    @router.message(F.text == "📦 Заказы")
+    @router.message(F.text == "Заказы")
     async def orders(message: Message) -> None:
         driver_id = await require_driver(message)
         if driver_id:
             await send_orders_page(message, driver_id)
 
-    @router.message(F.text == "🚕 Активный заказ")
+    @router.message(F.text == "Активный заказ")
     async def active_order(message: Message) -> None:
         driver_id = await require_driver(message)
         if not driver_id:
@@ -406,14 +456,14 @@ def build_router(
             reply_markup=order_keyboard(order),
         )
 
-    @router.message(F.text == "🔄 Обновить")
+    @router.message(F.text == "Обновить")
     async def refresh(message: Message) -> None:
         driver_id = await require_driver(message)
         if driver_id:
             await send_profile(message, driver_id)
 
     @router.message(Command("unlink"))
-    @router.message(F.text == "🔗 Привязка")
+    @router.message(F.text == "Привязка")
     async def binding(message: Message) -> None:
         if not message.from_user:
             return
@@ -426,7 +476,7 @@ def build_router(
             return
 
         await message.answer(
-            "<b>🔗 Привязка Telegram</b>\n\n"
+            "<b>Привязка Telegram</b>\n\n"
             f"Driver ID: <code>{html.escape(link.driver_id)}</code>\n"
             f"Телефон: {html.escape(link.phone or '—')}\n"
             "Привязка хранится локально и восстанавливается после перезапуска.",
@@ -456,7 +506,7 @@ def build_router(
         if query.message:
             await _safe_edit(
                 query.message,
-                "✅ Telegram отвязан от профиля водителя.",
+                "Telegram отвязан от профиля водителя.",
             )
             await query.message.answer(
                 "Чтобы привязать профиль снова, отправьте свой контакт.",
@@ -553,7 +603,7 @@ def build_router(
 
         await _safe_edit(
             query.message,
-            order_text(order) + "\n\n✅ Заказ завершён в mock-режиме.",
+            order_text(order) + "\n\nЗаказ завершён в mock-режиме.",
             reply_markup=order_keyboard(order, page),
         )
         await query.answer("Заказ завершён")
