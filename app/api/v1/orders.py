@@ -5,11 +5,13 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query
 
 from app.config import get_settings
-from app.mock_data import complete_order as complete_mock_order
-from app.mock_data import get_order as get_mock_order
-from app.mock_data import list_orders as list_mock_orders
+from app.services.fleet import FleetProviderError, get_fleet_provider
 
 router = APIRouter(prefix="/api/v1", tags=["orders"])
+
+
+def _provider_error(exc: FleetProviderError) -> HTTPException:
+    return HTTPException(status_code=503, detail=str(exc))
 
 
 @router.get("/orders")
@@ -22,29 +24,18 @@ async def list_orders(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> dict[str, Any]:
-    settings = get_settings()
+    try:
+        all_items = await get_fleet_provider().list_orders(
+            driver_id=driver_id,
+            status=status,
+        )
+    except FleetProviderError as exc:
+        raise _provider_error(exc) from exc
 
-    if settings.YANDEX_MOCK_MODE:
-        all_items = list_mock_orders(driver_id=driver_id, status=status)
-        items = all_items[offset : offset + limit]
-        return {
-            "items": items,
-            "total": len(all_items),
-            "limit": limit,
-            "offset": offset,
-            "filters": {
-                "driver_id": driver_id,
-                "status": status,
-                "date_from": date_from,
-                "date_to": date_to,
-                "filter_decision": filter_decision,
-            },
-            "mock": True,
-        }
-
+    items = all_items[offset : offset + limit]
     return {
-        "items": [],
-        "total": 0,
+        "items": items,
+        "total": len(all_items),
         "limit": limit,
         "offset": offset,
         "filters": {
@@ -54,53 +45,46 @@ async def list_orders(
             "date_to": date_to,
             "filter_decision": filter_decision,
         },
-        "mock": False,
+        "mock": get_settings().YANDEX_MOCK_MODE,
     }
 
 
 @router.get("/orders/{order_id}")
 async def get_order(order_id: str) -> dict[str, Any]:
-    settings = get_settings()
-    if settings.YANDEX_MOCK_MODE:
-        order = get_mock_order(order_id)
-        if not order:
-            raise HTTPException(status_code=404, detail="Заказ не найден.")
-        return {
-            "order": order,
-            "filter_result": None,
-            "driver": None,
-            "mock": True,
-        }
+    try:
+        order = await get_fleet_provider().get_order(order_id)
+    except FleetProviderError as exc:
+        raise _provider_error(exc) from exc
+
+    if not order:
+        raise HTTPException(status_code=404, detail="Заказ не найден.")
 
     return {
-        "order": {"id": order_id},
+        "order": order,
         "filter_result": None,
         "driver": None,
-        "mock": False,
+        "mock": get_settings().YANDEX_MOCK_MODE,
     }
 
 
 @router.post("/orders/{order_id}/complete")
 async def complete_order(order_id: str) -> dict[str, Any]:
-    settings = get_settings()
-
-    if not settings.YANDEX_MOCK_MODE:
+    if not get_settings().YANDEX_MOCK_MODE:
         raise HTTPException(
             status_code=501,
             detail=(
                 "Завершение реального заказа не реализовано: "
-                "в публичном Yandex Fleet API нет документированного "
-                "универсального метода завершения заказа водителя."
+                "публичный Fleet API не предоставляет универсальную "
+                "операцию завершения заказа водителя."
             ),
         )
 
     try:
-        order = complete_mock_order(order_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-
-    if not order:
-        raise HTTPException(status_code=404, detail="Заказ не найден.")
+        order = await get_fleet_provider().complete_order(order_id)
+    except FleetProviderError as exc:
+        message = str(exc)
+        status_code = 404 if "не найден" in message.lower() else 409
+        raise HTTPException(status_code=status_code, detail=message) from exc
 
     return {"order": order, "mock": True}
 
