@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     TELEGRAM_BOT_DB_PATH: str = ".data/telegram_bot.sqlite3"
     TELEGRAM_BOT_ORDERS_PAGE_SIZE: int = 5
     TELEGRAM_BOT_MODE: str = "polling"
+    TELEGRAM_HTTP_PROXY: str | None = None
     TELEGRAM_WEBHOOK_BASE_URL: str = ""
     TELEGRAM_WEBHOOK_PATH: str = "/api/v1/telegram/webhook"
     TELEGRAM_WEBHOOK_SECRET: str | None = None
