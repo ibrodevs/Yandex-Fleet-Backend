@@ -105,8 +105,8 @@ _RAW_OFFERS: list[dict[str, Any]] = [
         "source_price": 540.0,
         "demand_multiplier": 1.0,
         "payment_method": "card",
-        "status": "accepted",
-        "status_title": "Принят",
+        "status": "active",
+        "status_title": "Активный",
         "created_at": _ts(12),
         "expires_in_seconds": None,
     },
@@ -200,6 +200,7 @@ def list_mock_marketplace_orders() -> list[dict[str, Any]]:
             f"≈ {price:.0f} сом" if estimated else f"{price:.0f} сом"
         )
         item["can_accept"] = item.get("status") == "incoming"
+        item["can_complete"] = item.get("status") == "active"
         result.append(item)
     return result
 
@@ -217,14 +218,15 @@ def accept_mock_marketplace_order(
         if raw["status"] != "incoming":
             raise ValueError("Заказ уже недоступен для принятия.")
 
-        raw["status"] = "accepted"
-        raw["status_title"] = "Принят"
+        raw["status"] = "active"
+        raw["status_title"] = "Активный"
         raw["expires_in_seconds"] = None
         raw["accepted_at"] = datetime.now(timezone.utc).isoformat()
 
         for item in list_mock_marketplace_orders():
             if item["id"] == order_id:
                 item["can_accept"] = False
+                item["can_complete"] = True
                 return item
         return None
     return None
@@ -233,3 +235,29 @@ def accept_mock_marketplace_order(
 def reset_mock_marketplace_orders() -> None:
     _RAW_OFFERS.clear()
     _RAW_OFFERS.extend(deepcopy(_INITIAL_OFFERS))
+
+
+def complete_mock_marketplace_order(
+    order_id: str,
+    *,
+    driver_id: str,
+) -> dict[str, Any] | None:
+    for raw in _RAW_OFFERS:
+        if raw["id"] != order_id:
+            continue
+        if raw["driver_id"] != driver_id:
+            return None
+        if raw["status"] != "active":
+            raise ValueError("Завершить можно только активный заказ.")
+
+        raw["status"] = "completed"
+        raw["status_title"] = "Завершён"
+        raw["completed_at"] = datetime.now(timezone.utc).isoformat()
+
+        for item in list_mock_marketplace_orders():
+            if item["id"] == order_id:
+                item["can_accept"] = False
+                item["can_complete"] = False
+                return item
+        return None
+    return None
