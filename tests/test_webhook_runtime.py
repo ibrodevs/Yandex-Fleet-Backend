@@ -96,3 +96,32 @@ async def test_optional_telegram_ui_failure_does_not_break_webhook(
     finally:
         await runtime.close()
         get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_process_update_captures_handler_failure(monkeypatch, tmp_path):
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123456:TEST_TOKEN_FOR_RUNTIME")
+    monkeypatch.setenv(
+        "TELEGRAM_BOT_DB_PATH",
+        str(tmp_path / "telegram.sqlite3"),
+    )
+    get_settings.cache_clear()
+    runtime = TelegramWebhookRuntime()
+
+    try:
+        await runtime.initialize()
+        runtime.dispatcher.feed_update = AsyncMock(
+            side_effect=RuntimeError("synthetic handler failure")
+        )
+
+        handled = await runtime.process_update({"update_id": 777})
+
+        assert handled is False
+        assert runtime.state.updates_failed == 1
+        assert runtime.state.last_update_id == 777
+        assert runtime.state.last_update_error == (
+            "RuntimeError: synthetic handler failure"
+        )
+    finally:
+        await runtime.close()
+        get_settings.cache_clear()
