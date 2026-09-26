@@ -1,8 +1,8 @@
-from app.marketplace.mock import reset_mock_marketplace_orders
 from fastapi.testclient import TestClient
 
 from app.config import get_settings
 from app.main import app
+from app.marketplace.mock import reset_mock_marketplace_orders
 
 client = TestClient(app)
 
@@ -14,6 +14,8 @@ def test_miniapp_static_page_is_served():
     assert "telegram-web-app.js" in response.text
     assert 'id="i-orders"' in response.text
     assert "bottom-nav" in response.text
+    assert 'id="settingsView"' in response.text
+    assert 'id="incomingLayer"' in response.text
 
 
 def test_miniapp_demo_bootstrap(monkeypatch):
@@ -52,6 +54,15 @@ def test_miniapp_javascript_uses_svg_icons_without_emoji():
     assert 'href="#i-' in response.text
     for emoji in ("📍", "⏱", "💵", "💳", "⭐", "🚕", "📊", "👤"):
         assert emoji not in response.text
+
+
+def test_miniapp_has_configurable_incoming_window_and_stats():
+    response = client.get("/miniapp/app.js")
+    assert response.status_code == 200
+    assert "fleet-hub-incoming-settings-v1" in response.text
+    assert "showIncoming" in response.text
+    assert "Последние 7 дней" in response.text
+    assert "Проверить окно" in response.text
 
 
 def test_miniapp_demo_order_lifecycle(monkeypatch):

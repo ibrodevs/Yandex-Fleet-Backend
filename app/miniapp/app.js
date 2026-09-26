@@ -3,6 +3,25 @@
 
   // State
   const tg = window.Telegram?.WebApp;
+  const SETTINGS_KEY = "fleet-hub-incoming-settings-v1";
+  const defaultSettings = {
+    enabled: true,
+    timeout: 15,
+    opacity: 96,
+    theme: "dark",
+    showRoute: true,
+    showPayment: true,
+    showSource: true,
+  };
+
+  function loadSettings() {
+    try {
+      return { ...defaultSettings, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}") };
+    } catch (_) {
+      return { ...defaultSettings };
+    }
+  }
+
   const state = {
     data: null,
     source: "all",
@@ -10,6 +29,11 @@
     tariff: "all",
     actionVersion: 0,
     loadSequence: 0,
+    settings: loadSettings(),
+    popupOrderId: null,
+    popupTimer: null,
+    popupStartedAt: 0,
+    seenIncoming: new Set(),
   };
 
   // Utilities
@@ -85,6 +109,10 @@
 
   function haptic(type) {
     tg?.HapticFeedback?.notificationOccurred(type);
+  }
+
+  function saveSettings() {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
   }
 
   // Reusable order markup
@@ -217,16 +245,25 @@
   function renderStats() {
     const s = state.data.summary;
     const labels = { fasten: "Fasten", yandex: "Яндекс", vezet: "Везёт" };
+    const completed = state.data.orders.filter((order) => order.status === "completed");
+    const income = completed.reduce((sum, order) => sum + Number(order.price || 0), 0);
+    const distance = completed.reduce((sum, order) => sum + Number(order.distance_km || 0), 0);
+    const cash = completed.filter((order) => order.payment_method === "cash").reduce((sum, order) => sum + Number(order.price || 0), 0);
+    const card = income - cash;
     $("statsPanel").innerHTML = [
+      `<section class="stats-hero">
+        <div><span>Последние 7 дней</span><strong>${money(income)}</strong><small>Доход по завершённым заказам</small></div>
+        <div class="stats-hero-icon">${icon("trending")}</div>
+      </section>`,
       settingsGroup("Заказы", [
-        settingRow("orders", "Новые", s.incoming_count),
-        settingRow("route", "Активные", s.active_count),
-        settingRow("check", "Завершённые", s.completed_count),
+        settingRow("orders", "Всего заказов", state.data.orders.length),
+        settingRow("check", "Завершённые", completed.length),
+        settingRow("route", "Пробег", `${distance.toFixed(1)} км`),
       ].join("")),
-      settingsGroup("Цены", [
+      settingsGroup("Доход", [
         settingRow("trending", "Средняя цена", money(s.average_incoming_price)),
-        settingRow("card", "Точные цены", s.exact_price_count),
-        settingRow("calculator", "Расчётные цены", s.estimated_price_count),
+        settingRow("cash", "Наличные", money(cash)),
+        settingRow("card", "Картой", money(card)),
       ].join("")),
       settingsGroup("По агрегаторам", Object.entries(s.by_source).map(([key, value]) =>
         settingRow("orders", labels[key] || key, value)
@@ -260,12 +297,129 @@
     `;
   }
 
+  function toggleRow(id, title, description, checked) {
+    return `<label class="control-row" for="${id}">
+      <span><strong>${escapeHtml(title)}</strong><small>${escapeHtml(description)}</small></span>
+      <input class="switch-input" id="${id}" type="checkbox" ${checked ? "checked" : ""} />
+      <span class="switch" aria-hidden="true"></span>
+    </label>`;
+  }
+
+  function renderSettings() {
+    const p = state.settings;
+    $("settingsPanel").innerHTML = `
+      <section><h3 class="settings-group-title">Входящие заказы</h3><div class="settings-card">
+        ${toggleRow("settingEnabled", "Показывать окно", "Поверх любой вкладки Mini App", p.enabled)}
+        ${toggleRow("settingRoute", "Маршрут", "Адреса подачи и назначения", p.showRoute)}
+        ${toggleRow("settingPayment", "Способ оплаты", "Наличные или карта", p.showPayment)}
+        ${toggleRow("settingSource", "Агрегатор", "Название источника заказа", p.showSource)}
+      </div></section>
+      <section><h3 class="settings-group-title">Внешний вид</h3><div class="settings-card settings-controls">
+        <label class="select-control"><span><strong>Оформление</strong><small>Цвет окна заказа</small></span>
+          <select id="settingTheme"><option value="auto" ${p.theme === "auto" ? "selected" : ""}>Как в приложении</option><option value="dark" ${p.theme === "dark" ? "selected" : ""}>Тёмное</option><option value="light" ${p.theme === "light" ? "selected" : ""}>Светлое</option></select>
+        </label>
+        <label class="range-control" for="settingOpacity"><span><strong>Прозрачность</strong><output id="opacityValue">${p.opacity}%</output></span><input id="settingOpacity" type="range" min="70" max="100" step="1" value="${p.opacity}" /></label>
+        <label class="range-control" for="settingTimeout"><span><strong>Закрывать через</strong><output id="timeoutValue">${p.timeout} сек.</output></span><input id="settingTimeout" type="range" min="5" max="30" step="1" value="${p.timeout}" /></label>
+      </div></section>
+      <button class="btn btn-primary btn-large" id="previewIncoming" type="button">${icon("eye")}Проверить окно</button>
+      <p class="settings-footnote">Настройки сохраняются на этом устройстве и применяются сразу.</p>
+    `;
+
+    ["Enabled", "Route", "Payment", "Source"].forEach((name) => {
+      $("setting" + name).addEventListener("change", (event) => {
+        const keys = { Enabled: "enabled", Route: "showRoute", Payment: "showPayment", Source: "showSource" };
+        state.settings[keys[name]] = event.target.checked;
+        saveSettings();
+      });
+    });
+    $("settingTheme").addEventListener("change", (event) => {
+      state.settings.theme = event.target.value;
+      saveSettings();
+    });
+    $("settingOpacity").addEventListener("input", (event) => {
+      state.settings.opacity = Number(event.target.value);
+      $("opacityValue").textContent = `${event.target.value}%`;
+      saveSettings();
+    });
+    $("settingTimeout").addEventListener("input", (event) => {
+      state.settings.timeout = Number(event.target.value);
+      $("timeoutValue").textContent = `${event.target.value} сек.`;
+      saveSettings();
+    });
+    $("previewIncoming").addEventListener("click", () => {
+      const sample = state.data.orders.find((order) => order.status === "incoming");
+      if (sample) showIncoming(sample, true);
+      else showToast("Нет входящих заказов для предпросмотра");
+    });
+  }
+
   function renderAll() {
     renderHeader();
     renderActiveOrder();
     renderOrders();
     renderStats();
     renderProfile();
+    renderSettings();
+  }
+
+  // Compact incoming order window
+  function incomingMarkup(order, preview = false) {
+    const p = state.settings;
+    const price = priceDetails(order);
+    const theme = p.theme === "auto" ? (document.documentElement.dataset.theme || "light") : p.theme;
+    return `<div class="incoming-card" data-popup-theme="${theme}" style="--popup-opacity:${p.opacity / 100}">
+      <div class="incoming-title-row">
+        <span class="incoming-live"><i></i>${preview ? "ПРОВЕРКА ЭКРАНА" : "ВХОДЯЩИЙ ЗАКАЗ"}</span>
+        <button class="incoming-close" id="incomingClose" type="button" aria-label="Закрыть">${icon("close")}</button>
+      </div>
+      <div class="incoming-main"><div><strong>Входящий заказ</strong>${p.showSource ? `<span>${escapeHtml(order.source_title)} · ${escapeHtml(order.tariff_title)}</span>` : `<span>${escapeHtml(order.tariff_title)}</span>`}</div><b>${price.value}</b></div>
+      ${p.showRoute ? `<div class="incoming-route"><span>${icon("pin")}<b>А</b>${escapeHtml(order.pickup_address)}</span><span>${icon("flag")}<b>Б</b>${escapeHtml(order.destination_address)}</span></div>` : ""}
+      <div class="incoming-facts"><span>${icon("clock")}~${escapeHtml(order.duration_minutes)} мин</span><span>${icon("route")}${escapeHtml(order.distance_km)} км</span>${p.showPayment ? `<span>${icon(order.payment_method === "cash" ? "cash" : "card")}${paymentLabel(order.payment_method)}</span>` : ""}</div>
+      <div class="incoming-actions">
+        <button class="incoming-secondary" id="incomingDetails" type="button">Подробнее</button>
+        ${preview ? `<button class="incoming-primary" id="incomingDone" type="button">Готово</button>` : `<button class="incoming-primary" id="incomingAccept" type="button">Принять</button>`}
+      </div>
+      <small class="incoming-countdown" id="incomingCountdown"></small>
+    </div>`;
+  }
+
+  function hideIncoming() {
+    window.clearInterval(state.popupTimer);
+    state.popupTimer = null;
+    state.popupOrderId = null;
+    $("incomingLayer").classList.add("hidden");
+  }
+
+  function showIncoming(order, preview = false) {
+    if (!preview && !state.settings.enabled) return;
+    hideIncoming();
+    state.popupOrderId = order.id;
+    state.popupStartedAt = Date.now();
+    $("incomingContent").innerHTML = incomingMarkup(order, preview);
+    $("incomingLayer").classList.remove("hidden");
+    $("incomingClose").addEventListener("click", hideIncoming);
+    $("incomingDone")?.addEventListener("click", hideIncoming);
+    $("incomingDetails").addEventListener("click", () => { hideIncoming(); openOrder(order.id); });
+    $("incomingAccept")?.addEventListener("click", (event) => acceptOrder(order.id, event.currentTarget));
+
+    const duration = Math.max(5, Number(state.settings.timeout)) * 1000;
+    const updateCountdown = () => {
+      const remaining = Math.max(0, Math.ceil((duration - (Date.now() - state.popupStartedAt)) / 1000));
+      $("incomingCountdown").textContent = `Окно закроется через ${remaining} сек.`;
+      $("incomingProgress").style.setProperty("--progress", `${Math.max(0, remaining / (duration / 1000)) * 100}%`);
+      if (remaining <= 0) hideIncoming();
+    };
+    updateCountdown();
+    state.popupTimer = window.setInterval(updateCountdown, 250);
+    haptic("success");
+  }
+
+  function showNextIncoming() {
+    if (!state.settings.enabled || state.popupOrderId) return;
+    const fresh = state.data.orders.find((order) => order.status === "incoming" && !state.seenIncoming.has(order.id));
+    if (!fresh) return;
+    state.seenIncoming.add(fresh.id);
+    showIncoming(fresh);
   }
 
   // Order actions
@@ -299,6 +453,7 @@
       state.data.orders = state.data.orders.map((item) => item.id === orderId ? body.order : item);
       state.data.summary = body.summary;
       setStatusFilter("active");
+      hideIncoming();
       renderAll();
       closeSheet();
       showToast("Заказ принят");
@@ -419,6 +574,7 @@
       if (sequence !== state.loadSequence || actionVersion !== state.actionVersion) return;
       state.data = payload;
       renderAll();
+      window.setTimeout(showNextIncoming, 350);
     } catch (error) {
       if (!silent) showToast(error.message || "Не удалось загрузить приложение");
     } finally {
