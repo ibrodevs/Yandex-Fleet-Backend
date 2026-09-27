@@ -7,6 +7,7 @@ from app.api.v1.miniapp import router as miniapp_router
 from app.api.v1.orders import router as orders_router
 from app.api.v1.telegram import router as telegram_router
 from app.api.v1.vehicles import router as vehicles_router
+from app.mobile.router import router as mobile_router
 
 api_router = APIRouter()
 api_router.include_router(health_router)
@@ -17,3 +18,6 @@ api_router.include_router(integrations_router)
 api_router.include_router(miniapp_router)
 
 api_router.include_router(telegram_router)
+
+
+api_router.include_router(mobile_router)

@@ -20,6 +20,9 @@ class SuccessfulYandexClient:
 
 def test_yandex_status_reports_successful_sync_timestamp(monkeypatch):
     monkeypatch.setenv("YANDEX_MOCK_MODE", "false")
+    monkeypatch.setenv("YANDEX_CLIENT_ID", "test-client")
+    monkeypatch.setenv("YANDEX_API_KEY", "test-key")
+    monkeypatch.setenv("YANDEX_PARK_ID", "test-park")
     get_settings.cache_clear()
     monkeypatch.setattr(integrations_api, "YandexFleetClient", SuccessfulYandexClient)
     try:

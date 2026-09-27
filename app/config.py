@@ -61,6 +61,14 @@ class Settings(BaseSettings):
     DRIVER_SYNC_INTERVAL_SECONDS: int = 300
     VEHICLE_SYNC_INTERVAL_SECONDS: int = 600
 
+    MOBILE_ENABLED: bool = True
+    MOBILE_DB_PATH: str = ".data/mobile.sqlite3"
+    MOBILE_JWT_EXPIRE_DAYS: int = Field(default=30, ge=1, le=90)
+    MOBILE_ORDER_WATCHER_ENABLED: bool = True
+    MOBILE_ORDER_POLL_INTERVAL_SECONDS: int = Field(default=10, ge=5)
+    FIREBASE_PROJECT_ID: str = ""
+    FIREBASE_CREDENTIALS_FILE: str = ""
+
     LOG_LEVEL: str = "INFO"
 
     @property

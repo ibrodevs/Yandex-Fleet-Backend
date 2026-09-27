@@ -15,3 +15,13 @@ ENV/
 *.db
 .DS_Store
 *.log
+
+# Mobile credentials and signing
+**/google-services.json
+**/GoogleService-Info.plist
+**/firebase_options.dart
+**/key.properties
+*.jks
+*.keystore
+*firebase-adminsdk*.json
+.data/

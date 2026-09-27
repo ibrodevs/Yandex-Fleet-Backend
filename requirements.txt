@@ -18,3 +18,5 @@ ruff>=0.4.0
 mypy>=1.9.0
 aiogram>=3.13.0,<4.0
 aiohttp-socks>=0.10.0,<1.0
+
+firebase-admin>=6.5.0,<8

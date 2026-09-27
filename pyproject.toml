@@ -5,6 +5,7 @@ description = "Production-ready backend service for Yandex Fleet API integration
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "firebase-admin>=6.5.0,<8",
     "fastapi>=0.110.0",
     "uvicorn[standard]>=0.29.0",
     "pydantic>=2.7.0",
