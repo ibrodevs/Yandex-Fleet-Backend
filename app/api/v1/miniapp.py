@@ -25,22 +25,20 @@ def _real_summary(
     *,
     currency: str | None = None,
 ) -> dict[str, Any]:
-    incoming = [order for order in orders if order.get("status") in {"assigned", "waiting"}]
-    prices = [float(order["price"]) for order in incoming if order.get("price") is not None]
+    active_statuses = {"assigned", "waiting", "in_progress"}
+    active_count = len([order for order in orders if order.get("status") in active_statuses])
     return {
         "driver_id": driver_id,
-        "incoming_count": len(incoming),
-        "active_count": len([order for order in orders if order.get("status") == "in_progress"]),
-        "accepted_count": len(
-            [order for order in orders if order.get("status") in {"assigned", "waiting", "in_progress"}]
-        ),
+        "incoming_count": 0,
+        "active_count": active_count,
+        "accepted_count": active_count,
         "completed_count": len([order for order in orders if order.get("status") == "completed"]),
         "estimated_price_count": 0,
-        "exact_price_count": len(prices),
-        "average_incoming_price": round(sum(prices) / len(prices), 0) if prices else 0,
+        "exact_price_count": 0,
+        "average_incoming_price": 0,
         "currency": currency
         or next((order.get("currency") for order in orders if order.get("currency")), None),
-        "by_source": {"yandex": len(incoming)},
+        "by_source": {"yandex": 0},
         "sources": [{"id": "yandex", "title": "Яндекс"}],
     }
 
@@ -48,10 +46,7 @@ def _real_summary(
 def _miniapp_real_order(order: dict[str, Any]) -> dict[str, Any]:
     item = dict(order)
     status = item.get("status")
-    if status in {"assigned", "waiting"}:
-        item["status"] = "incoming"
-        item["status_title"] = "Новый заказ"
-    elif status == "in_progress":
+    if status in {"assigned", "waiting", "in_progress"}:
         item["status"] = "active"
         item["status_title"] = "Активный"
     item["can_accept"] = False

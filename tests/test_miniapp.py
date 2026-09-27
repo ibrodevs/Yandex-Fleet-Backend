@@ -65,6 +65,15 @@ def test_miniapp_has_configurable_incoming_window_and_stats():
     assert "Проверить окно" in response.text
 
 
+def test_miniapp_formats_missing_real_order_values_safely():
+    response = client.get("/miniapp/app.js")
+    assert response.status_code == 200
+    assert 'if (method === "corporate") return "Корпоративный";' in response.text
+    assert "function textOrDash" in response.text
+    assert "function distanceLabel" in response.text
+    assert "function durationLabel" in response.text
+
+
 def test_miniapp_demo_order_lifecycle(monkeypatch):
     monkeypatch.setenv("YANDEX_MOCK_MODE", "true")
     monkeypatch.setenv("TELEGRAM_MINI_APP_DEMO_MODE", "true")

@@ -57,8 +57,23 @@
       .replaceAll('"', "&quot;");
   }
 
+  function textOrDash(value) {
+    return value === null || value === undefined || value === "" ? "—" : escapeHtml(value);
+  }
+
+  function distanceLabel(value) {
+    return value === null || value === undefined || value === "" ? "—" : `${escapeHtml(value)} км`;
+  }
+
+  function durationLabel(value) {
+    return value === null || value === undefined || value === "" ? "—" : `~${escapeHtml(value)} мин`;
+  }
+
   function paymentLabel(method) {
-    return method === "cash" ? "Наличные" : "Карта";
+    if (method === "cash") return "Наличные";
+    if (method === "card") return "Карта";
+    if (method === "corporate") return "Корпоративный";
+    return "—";
   }
 
   function priceDetails(order) {
@@ -128,11 +143,11 @@
       <div class="route-list">
         <div class="route-row">
           ${icon("pin")}
-          <div><strong>Откуда</strong><span>${escapeHtml(order.pickup_address)}</span></div>
+          <div><strong>Откуда</strong><span>${textOrDash(order.pickup_address)}</span></div>
         </div>
         <div class="route-row">
           ${icon("flag")}
-          <div><strong>Куда</strong><span>${escapeHtml(order.destination_address)}</span></div>
+          <div><strong>Куда</strong><span>${textOrDash(order.destination_address)}</span></div>
         </div>
       </div>
     `;
@@ -142,8 +157,8 @@
     const paymentIcon = order.payment_method === "cash" ? "cash" : "card";
     return `
       <div class="order-meta">
-        <span class="meta-item">${icon("route")} ${escapeHtml(order.distance_km)} км</span>
-        <span class="meta-item">${icon("clock")} ~${escapeHtml(order.duration_minutes)} мин</span>
+        <span class="meta-item">${icon("route")} ${distanceLabel(order.distance_km)}</span>
+        <span class="meta-item">${icon("clock")} ${durationLabel(order.duration_minutes)}</span>
         <span class="meta-item">${icon(paymentIcon)} ${paymentLabel(order.payment_method)}</span>
       </div>
     `;
@@ -388,8 +403,8 @@
         <button class="incoming-close" id="incomingClose" type="button" aria-label="Закрыть">${icon("close")}</button>
       </div>
       <div class="incoming-main"><div><strong>Входящий заказ</strong>${p.showSource ? `<span>${escapeHtml(order.source_title)} · ${escapeHtml(order.tariff_title)}</span>` : `<span>${escapeHtml(order.tariff_title)}</span>`}</div><b>${price.value}</b></div>
-      ${p.showRoute ? `<div class="incoming-route"><span>${icon("pin")}<b>А</b>${escapeHtml(order.pickup_address)}</span><span>${icon("flag")}<b>Б</b>${escapeHtml(order.destination_address)}</span></div>` : ""}
-      <div class="incoming-facts"><span>${icon("clock")}~${escapeHtml(order.duration_minutes)} мин</span><span>${icon("route")}${escapeHtml(order.distance_km)} км</span>${p.showPayment ? `<span>${icon(order.payment_method === "cash" ? "cash" : "card")}${paymentLabel(order.payment_method)}</span>` : ""}</div>
+      ${p.showRoute ? `<div class="incoming-route"><span>${icon("pin")}<b>А</b>${textOrDash(order.pickup_address)}</span><span>${icon("flag")}<b>Б</b>${textOrDash(order.destination_address)}</span></div>` : ""}
+      <div class="incoming-facts"><span>${icon("clock")}${durationLabel(order.duration_minutes)}</span><span>${icon("route")}${distanceLabel(order.distance_km)}</span>${p.showPayment ? `<span>${icon(order.payment_method === "cash" ? "cash" : "card")}${paymentLabel(order.payment_method)}</span>` : ""}</div>
       <div class="incoming-actions">
         <button class="incoming-secondary" id="incomingDetails" type="button">Подробнее</button>
         ${preview
@@ -548,8 +563,8 @@
       </div>
       <section class="sheet-section"><div class="sheet-section-title">Маршрут</div>${routeMarkup(order)}</section>
       <div class="sheet-grid">
-        <div class="sheet-metric"><span>Расстояние</span><strong>${escapeHtml(order.distance_km)} км</strong></div>
-        <div class="sheet-metric"><span>Время</span><strong>~${escapeHtml(order.duration_minutes)} мин</strong></div>
+        <div class="sheet-metric"><span>Расстояние</span><strong>${distanceLabel(order.distance_km)}</strong></div>
+        <div class="sheet-metric"><span>Время</span><strong>${durationLabel(order.duration_minutes)}</strong></div>
         <div class="sheet-metric"><span>Оплата</span><strong>${icon(paymentIcon)}${paymentLabel(order.payment_method)}</strong></div>
         <div class="sheet-metric"><span>Статус</span><strong>${escapeHtml(order.status_title)}</strong></div>
       </div>

@@ -68,3 +68,28 @@ def test_real_miniapp_uses_provider_and_clean_empty_state(monkeypatch):
         assert payload["summary"]["sources"] == [{"id": "yandex", "title": "Яндекс"}]
     finally:
         get_settings.cache_clear()
+
+
+def test_real_miniapp_treats_yandex_work_statuses_as_active():
+    orders = [
+        {"id": "1", "status": "assigned", "price": 100, "currency": "RUB"},
+        {"id": "2", "status": "waiting", "price": 200, "currency": "RUB"},
+        {"id": "3", "status": "in_progress", "price": 300, "currency": "RUB"},
+        {"id": "4", "status": "completed", "price": 400, "currency": "RUB"},
+    ]
+
+    mapped = [miniapp_api._miniapp_real_order(order) for order in orders]
+    summary = miniapp_api._real_summary("real-driver", orders)
+
+    assert [order["status"] for order in mapped[:3]] == ["active", "active", "active"]
+    assert [order["status_title"] for order in mapped[:3]] == [
+        "Активный",
+        "Активный",
+        "Активный",
+    ]
+    assert summary["incoming_count"] == 0
+    assert summary["active_count"] == 3
+    assert summary["accepted_count"] == 3
+    assert summary["exact_price_count"] == 0
+    assert summary["average_incoming_price"] == 0
+    assert summary["by_source"] == {"yandex": 0}
