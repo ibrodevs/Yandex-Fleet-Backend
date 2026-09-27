@@ -12,6 +12,7 @@ from app.services.fleet.yandex_mappers import (
     map_yandex_driver,
     map_yandex_driver_summary,
     map_yandex_order,
+    map_yandex_vehicle,
 )
 from app.services.yandex.client import YandexFleetClient
 
@@ -45,14 +46,35 @@ class YandexFleetProvider(FleetProvider):
         try:
             return await awaitable
         except YandexAuthError as exc:
+            log_event(
+                logger,
+                "yandex_provider_error",
+                level="error",
+                error_type=type(exc).__name__,
+                status_code=exc.status_code,
+            )
             raise FleetProviderError(
                 "Доступ к Yandex Fleet отклонён. Проверьте ключи и доступ к парку."
             ) from exc
         except YandexRateLimitError as exc:
+            log_event(
+                logger,
+                "yandex_provider_error",
+                level="error",
+                error_type=type(exc).__name__,
+                status_code=exc.status_code,
+            )
             raise FleetProviderError(
                 "Yandex Fleet временно ограничил частоту запросов. Попробуйте позже."
             ) from exc
         except YandexApiError as exc:
+            log_event(
+                logger,
+                "yandex_provider_error",
+                level="error",
+                error_type=type(exc).__name__,
+                status_code=exc.status_code,
+            )
             if exc.status_code == 504:
                 message = "Данные Яндекс временно недоступны: превышено время ожидания."
             else:
@@ -117,6 +139,20 @@ class YandexFleetProvider(FleetProvider):
             orders,
             currency=driver.get("currency"),
         )
+
+    async def list_vehicles(self) -> list[dict[str, Any]]:
+        cars = await self._translate(self.client.list_cars())
+        return [vehicle for raw in cars if (vehicle := map_yandex_vehicle(raw))]
+
+    async def get_vehicle(self, vehicle_id: str) -> dict[str, Any] | None:
+        cars = await self._translate(
+            self.client.list_cars(car_ids=[vehicle_id], max_records=1)
+        )
+        for raw in cars:
+            vehicle = map_yandex_vehicle(raw)
+            if vehicle and str(vehicle.get("id")) == str(vehicle_id):
+                return vehicle
+        return None
 
     async def list_orders(
         self,

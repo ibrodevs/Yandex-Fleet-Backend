@@ -9,9 +9,10 @@ from tests.test_yandex_mappers import driver_fixture, order_fixture
 
 
 class FakeYandexClient:
-    def __init__(self, profiles=None, orders=None):
+    def __init__(self, profiles=None, orders=None, cars=None):
         self.profiles = profiles or []
         self.orders = orders or []
+        self.cars = cars or []
         self.order_calls = []
 
     async def list_driver_profiles(self, *, driver_profile_ids=None, max_records=None):
@@ -32,6 +33,12 @@ class FakeYandexClient:
         if kwargs.get("order_ids"):
             items = [item for item in items if item.get("id") in kwargs["order_ids"]]
         return items
+
+    async def list_cars(self, *, car_ids=None, max_records=None):
+        items = deepcopy(self.cars)
+        if car_ids:
+            items = [item for item in items if item.get("id") in car_ids]
+        return items[:max_records] if max_records else items
 
     async def get_order_track(self, order_id):
         return {"track": [{"order_status": "complete"}]}
@@ -65,6 +72,16 @@ async def test_driver_lookup_and_phone_exact_normalized_match():
     assert (await provider.get_driver_by_phone("+996555123456"))["id"] == "driver-1"
     assert (await provider.get_driver_by_phone("0555 123 456"))["id"] == "driver-1"
     assert await provider.get_driver_by_phone("+996700000000") is None
+
+
+@pytest.mark.asyncio
+async def test_vehicle_listing_and_lookup_are_mapped():
+    car = driver_fixture()["car"]
+    provider = YandexFleetProvider(FakeYandexClient(cars=[car]), settings=settings())
+
+    assert (await provider.list_vehicles())[0]["plate"] == "01KG001ABC"
+    assert (await provider.get_vehicle("car-1"))["brand"] == "Toyota"
+    assert await provider.get_vehicle("missing") is None
 
 
 @pytest.mark.asyncio

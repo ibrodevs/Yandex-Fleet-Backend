@@ -26,6 +26,14 @@ class FleetProvider(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    async def list_vehicles(self) -> list[dict[str, Any]]:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def get_vehicle(self, vehicle_id: str) -> dict[str, Any] | None:
+        raise NotImplementedError
+
+    @abstractmethod
     async def list_orders(
         self,
         *,

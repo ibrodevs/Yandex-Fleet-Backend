@@ -6,6 +6,7 @@ import pytest
 from app.config import Settings
 from app.core.exceptions import YandexApiError, YandexAuthError, YandexRateLimitError
 from app.services.yandex.client import (
+    CARS_PATH,
     DRIVER_PROFILES_PATH,
     ORDER_TRACK_PATH,
     ORDERS_PATH,
@@ -65,6 +66,32 @@ async def test_driver_profiles_uses_official_endpoint_headers_and_offset_paginat
     assert requests[0].headers["X-Client-ID"] == "test-client"
     assert requests[0].headers["X-API-Key"] == "test-key"
     assert json.loads(requests[0].content)["query"]["park"]["id"] == "test-park"
+    await http.aclose()
+
+
+@pytest.mark.asyncio
+async def test_cars_uses_official_endpoint_and_offset_pagination():
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        body = json.loads(request.content)
+        offset = body["offset"]
+        items = [{"id": f"car-{offset}", "brand": "Toyota"}]
+        return response(
+            request,
+            200,
+            {"cars": items, "limit": 1, "offset": offset, "total": 2},
+        )
+
+    http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    client = YandexFleetClient(http, settings=make_settings(YANDEX_MAX_RECORDS=2))
+
+    cars = await client.list_cars()
+
+    assert [item["id"] for item in cars] == ["car-0", "car-1"]
+    assert [json.loads(item.content)["offset"] for item in requests] == [0, 1]
+    assert requests[0].url.path == CARS_PATH
     await http.aclose()
 
 

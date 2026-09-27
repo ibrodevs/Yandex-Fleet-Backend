@@ -93,17 +93,23 @@ def map_yandex_driver(
     *,
     default_country_code: str = "996",
 ) -> dict[str, Any]:
-    profile = raw.get("driver_profile") or {}
-    current_status = raw.get("current_status") or {}
-    accounts = raw.get("accounts") or []
+    profile_value = raw.get("driver_profile")
+    profile = profile_value if isinstance(profile_value, dict) else {}
+    status_value = raw.get("current_status")
+    current_status = status_value if isinstance(status_value, dict) else {}
+    accounts_value = raw.get("accounts")
+    accounts = accounts_value if isinstance(accounts_value, list) else []
     current_account = next(
         (item for item in accounts if isinstance(item, dict) and item.get("type") == "current"),
         next((item for item in accounts if isinstance(item, dict)), {}),
     )
     vehicle = map_yandex_vehicle(raw.get("car"))
+    phones_value = profile.get("phones")
+    phone_values = phones_value if isinstance(phones_value, list) else []
     phones = [
         normalized
-        for value in (profile.get("phones") or [])
+        for value in phone_values
+        if isinstance(value, str)
         if (normalized := normalize_phone(value, default_country_code=default_country_code))
     ]
     name_parts = [
@@ -126,6 +132,8 @@ def map_yandex_driver(
         "status": profile.get("work_status"),
         "work_status": profile.get("work_status"),
         "local_driver_state": current_status.get("status"),
+        "status_updated_at": current_status.get("status_updated_at"),
+        "updated_at": raw.get("updated_at"),
         "rating": None,
         "priority_points": None,
         "balance": _number(current_account.get("balance")),

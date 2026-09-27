@@ -75,6 +75,18 @@ def test_driver_and_vehicle_mapping_preserve_real_values_and_missing_fields():
     assert map_yandex_vehicle(None) is None
 
 
+def test_driver_mapping_handles_nested_blocks_and_preserves_sync_timestamps():
+    raw = driver_fixture()
+    raw["updated_at"] = "2026-09-27T08:00:00Z"
+    raw["current_status"]["status_updated_at"] = "2026-09-27T07:59:00Z"
+
+    driver = map_yandex_driver(raw)
+
+    assert driver["updated_at"] == "2026-09-27T08:00:00Z"
+    assert driver["status_updated_at"] == "2026-09-27T07:59:00Z"
+    assert map_yandex_driver({"driver_profile": None, "accounts": {}})["id"] == ""
+
+
 def test_order_mapping_route_price_payment_status_and_timestamps():
     order = map_yandex_order(order_fixture())
     assert order["status"] == "completed"

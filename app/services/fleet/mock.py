@@ -19,6 +19,12 @@ class MockFleetProvider(FleetProvider):
     async def get_driver_summary(self, driver_id: str) -> dict[str, Any] | None:
         return mock_data.get_driver_summary(driver_id)
 
+    async def list_vehicles(self) -> list[dict[str, Any]]:
+        return mock_data.list_vehicles()
+
+    async def get_vehicle(self, vehicle_id: str) -> dict[str, Any] | None:
+        return mock_data.get_vehicle(vehicle_id)
+
     async def list_orders(
         self,
         *,

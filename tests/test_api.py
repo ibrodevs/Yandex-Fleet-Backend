@@ -19,6 +19,14 @@ def test_orders_endpoint():
     assert "total" in data
 
 
+def test_vehicles_endpoint():
+    response = client.get("/api/v1/vehicles")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] >= 1
+    assert data["items"][0]["id"]
+
+
 def test_yandex_status_endpoint():
     response = client.get("/api/v1/integrations/yandex/status")
     assert response.status_code == 200

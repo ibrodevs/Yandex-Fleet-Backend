@@ -229,6 +229,22 @@ def get_driver_by_phone(phone: str) -> dict[str, Any] | None:
     return None
 
 
+def list_vehicles() -> list[dict[str, Any]]:
+    vehicles = {
+        str(vehicle["id"]): vehicle
+        for driver in _DRIVERS.values()
+        if isinstance((vehicle := driver.get("vehicle")), dict) and vehicle.get("id")
+    }
+    return deepcopy(list(vehicles.values()))
+
+
+def get_vehicle(vehicle_id: str) -> dict[str, Any] | None:
+    return next(
+        (vehicle for vehicle in list_vehicles() if str(vehicle.get("id")) == str(vehicle_id)),
+        None,
+    )
+
+
 def list_orders(
     *,
     driver_id: str | None = None,

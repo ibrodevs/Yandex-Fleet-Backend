@@ -1,16 +1,23 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from fastapi import APIRouter
 
 from app.config import get_settings
 from app.core.exceptions import YandexApiError, YandexAuthError, YandexRateLimitError
+from app.core.logging import get_logger, log_event
 from app.services.yandex.client import YandexFleetClient
 
 router = APIRouter(prefix="/api/v1", tags=["integrations"])
+logger = get_logger(__name__)
+_last_successful_sync: str | None = None
 
 
 @router.get("/integrations/yandex/status")
 async def yandex_status() -> dict:
+    global _last_successful_sync
+
     settings = get_settings()
     configured = settings.is_yandex_configured
     mock_mode = settings.YANDEX_MOCK_MODE
@@ -24,14 +31,29 @@ async def yandex_status() -> dict:
             await client.list_driver_profiles(max_records=1)
             park_accessible = True
             fleet_api_available = True
-        except YandexAuthError:
+            _last_successful_sync = datetime.now(UTC).isoformat()
+        except YandexAuthError as exc:
             park_accessible = False
             fleet_api_available = True
             last_sync_error = "Yandex rejected credentials or park access."
-        except (YandexApiError, YandexRateLimitError):
+            log_event(
+                logger,
+                "yandex_status_check_failed",
+                level="error",
+                error_type=type(exc).__name__,
+                status_code=exc.status_code,
+            )
+        except (YandexApiError, YandexRateLimitError) as exc:
             park_accessible = None
             fleet_api_available = False
             last_sync_error = "Yandex Fleet API is temporarily unavailable."
+            log_event(
+                logger,
+                "yandex_status_check_failed",
+                level="error",
+                error_type=type(exc).__name__,
+                status_code=exc.status_code,
+            )
         finally:
             await client.aclose()
     elif mock_mode:
@@ -49,7 +71,7 @@ async def yandex_status() -> dict:
         "fleet_api_available": fleet_api_available,
         "park_accessible": park_accessible,
         "park_id_configured": bool(settings.YANDEX_PARK_ID),
-        "last_successful_sync": None,
+        "last_successful_sync": _last_successful_sync,
         "last_sync_error": last_sync_error,
         "features": {
             "orders_read": mock_mode or real_read_ready,
