@@ -38,7 +38,12 @@
 
   // Utilities
   const $ = (id) => document.getElementById(id);
-  const money = (value) => `${Math.round(Number(value || 0))} сом`;
+  const money = (value, currency = state.data?.summary?.currency) => {
+    if (value === null || value === undefined || value === "") return "—";
+    const units = { KGS: "сом", RUB: "₽", USD: "$", EUR: "€" };
+    const unit = units[currency] || currency || "";
+    return `${Math.round(Number(value))}${unit ? ` ${unit}` : ""}`;
+  };
 
   function icon(name, className = "icon") {
     return `<svg class="${className}" aria-hidden="true"><use href="#i-${name}"></use></svg>`;
@@ -58,7 +63,9 @@
 
   function priceDetails(order) {
     return {
-      value: order.price_is_estimated ? `≈ ${money(order.price)}` : money(order.price),
+      value: order.price_is_estimated
+        ? `≈ ${money(order.price, order.currency || state.data?.summary?.currency)}`
+        : money(order.price, order.currency || state.data?.summary?.currency),
       caption: order.price_is_estimated ? "Ориентировочная цена" : "Цена агрегатора",
     };
   }
@@ -202,6 +209,12 @@
     $("activeCount").textContent = summary.active_count;
     $("averagePrice").textContent = money(summary.average_incoming_price);
     $("priceDisclaimer").textContent = state.data.price_disclaimer;
+    document.querySelectorAll('[data-source="fasten"], [data-source="vezet"]').forEach((button) => {
+      button.classList.toggle("hidden", !state.data.mock);
+    });
+    if (!state.data.mock && !["all", "yandex"].includes(state.source)) {
+      state.source = "all";
+    }
   }
 
   function renderActiveOrder() {
@@ -229,7 +242,9 @@
     if (emptyCopy) {
       emptyCopy.textContent = state.status === "active"
         ? "Текущий активный заказ находится в приоритетном блоке выше."
-        : "Попробуйте изменить фильтры или обновить ленту.";
+        : state.data.mock
+          ? "Попробуйте изменить фильтры или обновить ленту."
+          : "Пока нет заказов. Обновите данные позже.";
     }
     bindOrderActions($("ordersList"));
   }
@@ -377,7 +392,11 @@
       <div class="incoming-facts"><span>${icon("clock")}~${escapeHtml(order.duration_minutes)} мин</span><span>${icon("route")}${escapeHtml(order.distance_km)} км</span>${p.showPayment ? `<span>${icon(order.payment_method === "cash" ? "cash" : "card")}${paymentLabel(order.payment_method)}</span>` : ""}</div>
       <div class="incoming-actions">
         <button class="incoming-secondary" id="incomingDetails" type="button">Подробнее</button>
-        ${preview ? `<button class="incoming-primary" id="incomingDone" type="button">Готово</button>` : `<button class="incoming-primary" id="incomingAccept" type="button">Принять</button>`}
+        ${preview
+          ? `<button class="incoming-primary" id="incomingDone" type="button">Готово</button>`
+          : order.can_accept
+            ? `<button class="incoming-primary" id="incomingAccept" type="button">Принять</button>`
+            : `<button class="incoming-primary" id="incomingDone" type="button">Закрыть</button>`}
       </div>
       <small class="incoming-countdown" id="incomingCountdown"></small>
     </div>`;

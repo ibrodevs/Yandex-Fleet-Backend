@@ -5,7 +5,7 @@ import html
 import logging
 from typing import Any
 
-from aiogram import Bot, Dispatcher, F, Router
+from aiogram import Dispatcher, F, Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, CommandStart
 from aiogram.types import BotCommand, CallbackQuery, Message
@@ -27,13 +27,21 @@ from app.bot.presenters import (
     order_text,
     stats_text,
 )
-from app.bot.storage import DriverLinkStore
 from app.bot.service import BotBackend
+from app.bot.storage import DriverLinkStore
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
 ACTIVE_STATUSES = {"assigned", "waiting", "in_progress"}
+
+
+def contact_belongs_to_user(contact_user_id: int | None, telegram_user_id: int) -> bool:
+    return contact_user_id is not None and contact_user_id == telegram_user_id
+
+
+def order_belongs_to_driver(order: dict[str, Any], driver_id: str) -> bool:
+    return bool(order.get("driver_id")) and str(order["driver_id"]) == str(driver_id)
 
 
 async def _safe_edit(
@@ -211,7 +219,7 @@ def build_router(
             await query.answer("Заказ не найден.", show_alert=True)
             return None
 
-        if str(order.get("driver_id")) != str(driver_id):
+        if not order_belongs_to_driver(order, driver_id):
             await query.answer(
                 "Этот заказ не принадлежит вашему профилю.",
                 show_alert=True,
@@ -243,9 +251,15 @@ def build_router(
         )
 
         if mini_app_url:
+            app_description = (
+                "Откройте приложение, чтобы посмотреть демонстрационные "
+                "заказы, тарифы и расчёт цены."
+                if mock_mode
+                else "Откройте приложение, чтобы посмотреть профиль и "
+                "реальные данные заказов из Yandex Fleet."
+            )
             await message.answer(
-                "Откройте приложение, чтобы посмотреть поступающие заказы "
-                "Fasten, Яндекс и Везёт, тарифы и расчёт цены.",
+                app_description,
                 reply_markup=miniapp_keyboard(mini_app_url),
             )
 
@@ -347,7 +361,10 @@ def build_router(
         if not message.from_user or not message.contact:
             return
 
-        if message.contact.user_id != message.from_user.id:
+        if not contact_belongs_to_user(
+            message.contact.user_id,
+            message.from_user.id,
+        ):
             await message.answer(
                 "Для безопасности нужно отправить именно свой контакт "
                 "кнопкой «Поделиться номером».",
@@ -360,12 +377,17 @@ def build_router(
                 message.contact.phone_number
             )
         except BackendError as exc:
-            await message.answer(f"Ошибка backend: {html.escape(str(exc))}")
+            logger.warning("Driver phone lookup failed: %s", exc)
+            await message.answer(
+                "Данные Яндекс временно недоступны. Попробуйте ещё раз позже.",
+                reply_markup=contact_keyboard(),
+            )
             return
 
         if not driver:
             await message.answer(
-                "В парке не найден водитель с этим номером.",
+                "Водитель с этим номером пока не найден в парке.\n\n"
+                "Если вас недавно добавили в парк, попробуйте ещё раз позже.",
                 reply_markup=contact_keyboard(),
             )
             return
@@ -397,10 +419,15 @@ def build_router(
                 reply_markup=main_keyboard(),
             )
             return
+        description = (
+            "Внутри доступны демонстрационные заказы нескольких агрегаторов, "
+            "маршруты и примерный расчёт цены."
+            if mock_mode
+            else "Внутри доступны профиль водителя и реальные данные заказов, "
+            "которые предоставляет Yandex Fleet API."
+        )
         await message.answer(
-            "<b>Парковое приложение</b>\n\n"
-            "Внутри собраны поступающие заказы Fasten, Яндекс и Везёт, "
-            "тарифы, маршрут и цена или её примерный расчёт.",
+            f"<b>Парковое приложение</b>\n\n{description}",
             reply_markup=miniapp_keyboard(mini_app_url),
         )
 
@@ -502,7 +529,7 @@ def build_router(
 
     @router.callback_query(F.data == "unlink:no")
     async def unlink_no(query: CallbackQuery) -> None:
-        if query.message:
+        if isinstance(query.message, Message):
             await query.message.delete()
         await query.answer("Отменено")
 
@@ -523,7 +550,7 @@ def build_router(
     @router.callback_query(F.data.startswith("orders:"))
     async def orders_page_callback(query: CallbackQuery) -> None:
         driver_id = await require_callback_driver(query)
-        if not driver_id or not query.data or not query.message:
+        if not driver_id or not query.data or not isinstance(query.message, Message):
             return
         try:
             page = int(query.data.split(":", 1)[1])
@@ -600,7 +627,7 @@ def build_router(
             await query.answer(str(exc), show_alert=True)
             return
 
-        if str(order.get("driver_id")) != str(driver_id):
+        if not order_belongs_to_driver(order, driver_id):
             await query.answer(
                 "Backend вернул заказ другого водителя.",
                 show_alert=True,

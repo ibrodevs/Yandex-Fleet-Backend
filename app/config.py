@@ -35,6 +35,13 @@ class Settings(BaseSettings):
     YANDEX_API_KEY: str | None = None
     YANDEX_PARK_ID: str | None = None
     YANDEX_MOCK_MODE: bool = True
+    YANDEX_ORDERS_LOOKBACK_DAYS: int = 7
+    YANDEX_MAX_PAGES: int = 20
+    YANDEX_MAX_RECORDS: int = 5000
+    YANDEX_HTTP_CONNECT_TIMEOUT_SECONDS: float = 5.0
+    YANDEX_HTTP_READ_TIMEOUT_SECONDS: float = 15.0
+    YANDEX_RETRY_ATTEMPTS: int = 3
+    PHONE_DEFAULT_COUNTRY_CODE: str = "996"
 
     TELEGRAM_BOT_TOKEN: str | None = None
     TELEGRAM_BOT_BACKEND_URL: str = "http://127.0.0.1:8000"

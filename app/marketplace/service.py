@@ -8,7 +8,6 @@ from app.marketplace.mock import (
     list_mock_marketplace_orders,
 )
 
-
 SOURCE_TITLES = {
     "fasten": "Fasten",
     "yandex": "Яндекс",

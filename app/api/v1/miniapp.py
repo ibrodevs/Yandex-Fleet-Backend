@@ -6,7 +6,6 @@ from fastapi import APIRouter, Header, HTTPException, Query
 
 from app.bot.storage import DriverLinkStore
 from app.config import get_settings
-from app.miniapp.auth import MiniAppAuthError, validate_telegram_init_data
 from app.marketplace import (
     accept_marketplace_order,
     complete_marketplace_order,
@@ -14,9 +13,50 @@ from app.marketplace import (
     get_marketplace_summary,
 )
 from app.marketplace.service import list_marketplace_orders
+from app.miniapp.auth import MiniAppAuthError, validate_telegram_init_data
 from app.services.fleet import FleetProviderError, get_fleet_provider
 
 router = APIRouter(prefix="/api/v1/miniapp", tags=["miniapp"])
+
+
+def _real_summary(
+    driver_id: str,
+    orders: list[dict[str, Any]],
+    *,
+    currency: str | None = None,
+) -> dict[str, Any]:
+    incoming = [order for order in orders if order.get("status") in {"assigned", "waiting"}]
+    prices = [float(order["price"]) for order in incoming if order.get("price") is not None]
+    return {
+        "driver_id": driver_id,
+        "incoming_count": len(incoming),
+        "active_count": len([order for order in orders if order.get("status") == "in_progress"]),
+        "accepted_count": len(
+            [order for order in orders if order.get("status") in {"assigned", "waiting", "in_progress"}]
+        ),
+        "completed_count": len([order for order in orders if order.get("status") == "completed"]),
+        "estimated_price_count": 0,
+        "exact_price_count": len(prices),
+        "average_incoming_price": round(sum(prices) / len(prices), 0) if prices else 0,
+        "currency": currency
+        or next((order.get("currency") for order in orders if order.get("currency")), None),
+        "by_source": {"yandex": len(incoming)},
+        "sources": [{"id": "yandex", "title": "Яндекс"}],
+    }
+
+
+def _miniapp_real_order(order: dict[str, Any]) -> dict[str, Any]:
+    item = dict(order)
+    status = item.get("status")
+    if status in {"assigned", "waiting"}:
+        item["status"] = "incoming"
+        item["status_title"] = "Новый заказ"
+    elif status == "in_progress":
+        item["status"] = "active"
+        item["status_title"] = "Активный"
+    item["can_accept"] = False
+    item["can_complete"] = False
+    return item
 
 
 async def _resolve_driver_id(
@@ -83,13 +123,36 @@ async def miniapp_bootstrap(
     if not driver:
         raise HTTPException(status_code=404, detail="Водитель не найден.")
 
-    orders = list_marketplace_orders(
-        driver_id=driver_id,
-        source=source,
-        status=status,
-        tariff=tariff,
-    )
-    summary = get_marketplace_summary(driver_id)
+    if settings.YANDEX_MOCK_MODE:
+        orders = list_marketplace_orders(
+            driver_id=driver_id,
+            source=source,
+            status=status,
+            tariff=tariff,
+        )
+        summary = get_marketplace_summary(driver_id)
+        price_disclaimer = (
+            "Сумма со знаком ≈ рассчитана демонстрационной моделью. "
+            "После подключения агрегаторов будет использоваться их цена, "
+            "когда она доступна."
+        )
+    else:
+        try:
+            orders = await provider.list_orders(driver_id=driver_id)
+        except FleetProviderError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        summary = _real_summary(driver_id, orders, currency=driver.get("currency"))
+        orders = [_miniapp_real_order(order) for order in orders]
+        if source and source not in {"all", "yandex"}:
+            orders = []
+        if status:
+            orders = [order for order in orders if order.get("status") == status]
+        if tariff:
+            orders = [order for order in orders if order.get("category") == tariff]
+        price_disclaimer = (
+            "Показаны данные, доступные через официальный Yandex Fleet API. "
+            "Отсутствующие значения не рассчитываются автоматически."
+        )
 
     return {
         "mode": "demo" if is_demo else "telegram",
@@ -98,11 +161,7 @@ async def miniapp_bootstrap(
         "telegram_user": telegram_user,
         "summary": summary,
         "orders": orders,
-        "price_disclaimer": (
-            "Сумма со знаком ≈ рассчитана демонстрационной моделью. "
-            "После подключения агрегаторов будет использоваться их цена, "
-            "когда она доступна."
-        ),
+        "price_disclaimer": price_disclaimer,
     }
 
 
@@ -119,7 +178,15 @@ async def miniapp_order(
         init_data=x_telegram_init_data,
         demo=demo,
     )
-    order = get_marketplace_order(order_id, driver_id=driver_id)
+    if get_settings().YANDEX_MOCK_MODE:
+        order = get_marketplace_order(order_id, driver_id=driver_id)
+    else:
+        try:
+            order = await get_fleet_provider().get_order(order_id)
+        except FleetProviderError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        if order and str(order.get("driver_id")) != str(driver_id):
+            order = None
     if not order:
         raise HTTPException(status_code=404, detail="Заказ не найден.")
     return order

@@ -80,12 +80,13 @@ class YandexAuthError(AppException):
     def __init__(
         self,
         message: str = "Yandex Fleet API authentication failed. Check credentials.",
+        status_code: int = 401,
         details: Any | None = None,
     ):
         super().__init__(
             code="YANDEX_AUTH_ERROR",
             message=message,
-            status_code=401,
+            status_code=status_code,
             details=details,
         )
 

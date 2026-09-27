@@ -9,7 +9,9 @@ Stage 1 is designed to be fully testable **without Yandex Fleet credentials and 
 Implemented:
 
 - stable backend contract for drivers and orders;
-- provider abstraction `FleetProvider` for switching mock → real Yandex later;
+- provider abstraction with working mock and read-only real Yandex adapters;
+- official Yandex driver profiles, vehicles, orders and order-track clients;
+- bounded offset/cursor pagination and safe HTTP retries;
 - rich mock driver profile;
 - rich mock order data;
 - driver lookup by phone;
@@ -49,13 +51,18 @@ FastAPI backend
    │
    ▼
 FleetProvider
-   ├── MockFleetProvider   ← Stage 1
-   └── YandexFleetProvider ← Stage 2 / real park credentials
+   ├── MockFleetProvider
+   └── YandexFleetProvider
+             │
+             ▼
+      YandexFleetClient
+             │
+             ▼
+      Official Fleet API
 ```
 
-Telegram never talks to Yandex directly. When real park credentials arrive,
-the bot UI and handlers do not need to be rewritten; only the real provider
-adapter needs to map Fleet API data into the existing backend contract.
+Telegram never talks to Yandex directly. Mock and real modes use the same
+backend contract, Telegram handlers and ownership checks.
 
 ## Requirements
 
@@ -249,32 +256,59 @@ Tests cover:
 - persistent Telegram binding;
 - unlink;
 - transfer of one driver binding to a new Telegram user.
+- official Yandex URLs, headers and request payloads;
+- offset and cursor pagination with loop protection;
+- authentication, rate-limit, server, timeout and invalid-JSON errors;
+- driver, vehicle and order mapping with missing/unknown fields;
+- exact normalized phone lookup;
+- empty real park and cross-driver order isolation;
+- unsupported real order completion.
 
 GitHub Actions also runs `pytest -q` on pushes to `main`.
 
-## Switching to the real park later
+## Real Yandex Fleet mode
 
-When the client sends:
+Real read-only integration uses the same `FleetProvider` contract as the mock
+backend. Configure `YANDEX_CLIENT_ID`, `YANDEX_API_KEY`, `YANDEX_PARK_ID` and a
+bounded order window such as `YANDEX_ORDERS_LOOKBACK_DAYS=7`.
 
-```env
-YANDEX_CLIENT_ID=...
-YANDEX_API_KEY=...
-YANDEX_PARK_ID=...
+Keep `YANDEX_MOCK_MODE=true` while validating a new deployment. First run the
+safe, read-only smoke test:
+
+```bash
+python -m scripts.yandex_smoke_test
 ```
 
-the next integration step is to implement the mapping inside:
+It prints only statuses and counts; credentials are never printed. A new empty
+park is valid and should report `DRIVERS: 0` and `CARS: 0`.
 
-```text
-app/services/fleet/yandex.py
-```
-
-After that:
+Only after tests, import checks, health checks and the smoke test pass, enable:
 
 ```env
 YANDEX_MOCK_MODE=false
+TELEGRAM_MINI_APP_DEMO_MODE=false
 ```
 
-The public REST routes and Telegram bot remain the same.
+Do not switch these values automatically on an active production deployment.
+
+### Official endpoints used
+
+- `POST /v1/parks/driver-profiles/list` — driver profiles and embedded account/car data;
+- `POST /v1/parks/cars/list` — batched vehicle listing;
+- `POST /v1/parks/orders/list` — orders for a bounded date range;
+- `POST /v1/parks/orders/track` — track for one explicitly opened order.
+
+Driver profiles and cars use offset pagination in the official API. Orders use
+cursor pagination. Both implementations have page/record limits and loop
+protection. Unlimited order history is never requested.
+
+### Telegram binding in real mode
+
+The driver sends their own Telegram Contact. The bot verifies that the contact
+belongs to the sender, normalizes the phone, finds an exact match in Yandex
+driver profiles and persists the Yandex driver ID in SQLite. Orders are filtered
+by `driver_profile.id` and ownership is checked again before details/actions are
+shown. An empty park or unknown phone returns a normal not-found response.
 
 ## Stage 1 definition of done
 
@@ -292,6 +326,9 @@ Stage 1 is considered complete when all of these pass:
 - restart preserves Telegram binding;
 - unlink removes the binding;
 - foreign order IDs are rejected by the bot;
+- an empty real park returns normal empty lists;
+- real driver lookup uses exact normalized phones;
+- real orders use a bounded date range and driver filter;
 - real mode never fakes successful completion of a Yandex Pro order.
 
 ## Public Fleet API limitations
@@ -304,6 +341,22 @@ The public API does not expose supported generic methods for:
 - completing a driver's real Yandex Pro order.
 
 Those actions must not return fake success in real mode.
+
+The documented public Orders API currently exposes list and track operations,
+but no generic operation for completing a driver's Yandex Pro order. Real
+orders therefore have `can_complete=false`; the bot instructs the driver to
+finish the trip in Yandex Pro. Private or reverse-engineered endpoints are not
+used.
+
+## First real driver checklist
+
+1. Run `python -m scripts.yandex_smoke_test`; verify `DRIVERS` is at least 1.
+2. Send `/start` and share the driver's own Telegram Contact.
+3. Verify exact phone lookup, profile, vehicle and tariffs.
+4. Open the order list and one order's details.
+5. Confirm that a different driver's order ID is rejected.
+6. Restart the backend and confirm the Telegram binding is restored.
+7. Confirm real completion is hidden and no mock marketplace orders appear.
 
 
 ## PythonAnywhere deployment
@@ -371,6 +424,10 @@ distance, duration and a demand multiplier.
 
 Filters are available by aggregator, status and tariff. The Mini App also has
 statistics and driver profile screens.
+
+In real mode the Mini App reads only the linked driver's Yandex orders. It does
+not expose the Fasten/Везёт demo feed, does not estimate missing real values,
+and shows a clean empty state when there are no orders.
 
 Telegram integration:
 

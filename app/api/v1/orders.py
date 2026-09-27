@@ -28,6 +28,8 @@ async def list_orders(
         all_items = await get_fleet_provider().list_orders(
             driver_id=driver_id,
             status=status,
+            date_from=date_from,
+            date_to=date_to,
         )
     except FleetProviderError as exc:
         raise _provider_error(exc) from exc

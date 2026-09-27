@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from app.marketplace.pricing import estimate_price_details
 
-
-_NOW = datetime.now(timezone.utc)
+_NOW = datetime.now(UTC)
 
 
 def _ts(minutes_ago: int) -> str:
@@ -235,7 +234,7 @@ def accept_mock_marketplace_order(
         raw["status"] = "active"
         raw["status_title"] = "Активный"
         raw["expires_in_seconds"] = None
-        raw["accepted_at"] = datetime.now(timezone.utc).isoformat()
+        raw["accepted_at"] = datetime.now(UTC).isoformat()
         raw["active_at"] = raw["accepted_at"]
 
         for item in list_mock_marketplace_orders():
@@ -267,7 +266,7 @@ def complete_mock_marketplace_order(
 
         raw["status"] = "completed"
         raw["status_title"] = "Завершён"
-        raw["completed_at"] = datetime.now(timezone.utc).isoformat()
+        raw["completed_at"] = datetime.now(UTC).isoformat()
 
         for item in list_mock_marketplace_orders():
             if item["id"] == order_id:

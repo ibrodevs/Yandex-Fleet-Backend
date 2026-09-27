@@ -24,8 +24,15 @@ class MockFleetProvider(FleetProvider):
         *,
         driver_id: str | None = None,
         status: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
     ) -> list[dict[str, Any]]:
-        return mock_data.list_orders(driver_id=driver_id, status=status)
+        items = mock_data.list_orders(driver_id=driver_id, status=status)
+        if date_from:
+            items = [item for item in items if str(item.get("created_at") or "") >= date_from]
+        if date_to:
+            items = [item for item in items if str(item.get("created_at") or "") <= date_to]
+        return items
 
     async def get_order(self, order_id: str) -> dict[str, Any] | None:
         return mock_data.get_order(order_id)

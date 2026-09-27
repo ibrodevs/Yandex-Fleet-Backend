@@ -123,6 +123,8 @@ Do not commit `.env`.
 cd ~/Yandex-Fleet-Backend
 source ~/.virtualenvs/yandex-fleet/bin/activate
 pytest -q
+python -c "from app.main import app; print('IMPORT OK')"
+node --check app/miniapp/app.js
 ```
 
 Expected:
@@ -253,13 +255,15 @@ cd ~/Yandex-Fleet-Backend
 git pull origin main
 source ~/.virtualenvs/yandex-fleet/bin/activate
 pip install -r requirements.txt
+python -c "from app.main import app; print('IMPORT OK')"
 pytest -q
+node --check app/miniapp/app.js
 pa website reload --domain YOURUSERNAME.pythonanywhere.com
 ```
 
 The FastAPI startup hook will refresh the Telegram webhook automatically.
 
-## 12. Real Yandex credentials later
+## 12. Real Yandex mode
 
 When the park sends:
 
@@ -269,13 +273,37 @@ YANDEX_API_KEY=...
 YANDEX_PARK_ID=...
 ```
 
-implement/enable the real provider and then switch:
+Keep mock mode enabled and first run the read-only API smoke test:
+
+```bash
+python -m scripts.yandex_smoke_test
+```
+
+An empty new park (`DRIVERS: 0`, `CARS: 0`) is valid. After the smoke test,
+full test suite, import check and JavaScript check pass, switch explicitly:
 
 ```env
 YANDEX_MOCK_MODE=false
+TELEGRAM_MINI_APP_DEMO_MODE=false
 ```
 
-The Telegram webhook deployment does not change.
+Reload the existing site and check:
+
+```bash
+pa website reload --domain yandexfeetbackend21.pythonanywhere.com
+curl -fsS https://yandexfeetbackend21.pythonanywhere.com/health/ready
+curl -fsS https://yandexfeetbackend21.pythonanywhere.com/api/v1/integrations/yandex/status
+curl -fsS https://yandexfeetbackend21.pythonanywhere.com/api/v1/telegram/status
+curl -I https://yandexfeetbackend21.pythonanywhere.com/miniapp/
+```
+
+Do not recreate the site if reload returns 502. Inspect the existing error and
+server logs first:
+
+```bash
+tail -n 150 /var/log/yandexfeetbackend21.pythonanywhere.com.error.log
+tail -n 150 /var/log/yandexfeetbackend21.pythonanywhere.com.server.log
+```
 
 ## Troubleshooting
 

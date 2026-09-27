@@ -31,6 +31,8 @@ class FleetProvider(ABC):
         *,
         driver_id: str | None = None,
         status: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
     ) -> list[dict[str, Any]]:
         raise NotImplementedError
 

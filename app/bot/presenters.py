@@ -4,7 +4,6 @@ import html
 from datetime import datetime
 from typing import Any
 
-
 STATUS_TITLES = {
     "assigned": "Назначен",
     "waiting": "Ожидание",
@@ -50,6 +49,11 @@ def datetime_text(value: Any) -> str:
         return esc(value)
 
 
+def money_with_currency(value: Any, currency: Any) -> str:
+    amount = money(value)
+    return f"{amount} {esc(currency)}" if currency else amount
+
+
 def driver_profile_text(
     driver: dict[str, Any],
     summary: dict[str, Any] | None = None,
@@ -70,7 +74,7 @@ def driver_profile_text(
         f"Статус: {esc(driver.get('work_rule') or driver.get('status'))}",
         f"Рейтинг: {esc(driver.get('rating'))}",
         f"Приоритет: {esc(driver.get('priority_points'))}",
-        f"Баланс: {money(driver.get('balance'))} {esc(driver.get('currency') or 'KGS')}",
+        f"Баланс: {money_with_currency(driver.get('balance'), driver.get('currency'))}",
         f"Тарифы: {esc(tariffs)}",
         "",
         "<b>Автомобиль</b>",
@@ -87,7 +91,7 @@ def driver_profile_text(
                 f"Активных: {esc(summary.get('active_orders'))}",
                 f"Завершено: {esc(summary.get('completed_orders'))}",
                 f"Отменено: {esc(summary.get('cancelled_orders'))}",
-                f"Заработок: {money(summary.get('earnings'))} {esc(summary.get('currency') or 'KGS')}",
+                f"Заработок: {money_with_currency(summary.get('earnings'), summary.get('currency'))}",
                 f"Пройдено: {esc(summary.get('distance_km'))} км",
             ]
         )
@@ -104,20 +108,19 @@ def stats_text(summary: dict[str, Any]) -> str:
             f"Активных: {esc(summary.get('active_orders'))}",
             f"Завершено: {esc(summary.get('completed_orders'))}",
             f"Отменено: {esc(summary.get('cancelled_orders'))}",
-            f"Заработок: {money(summary.get('earnings'))} {esc(summary.get('currency') or 'KGS')}",
+            f"Заработок: {money_with_currency(summary.get('earnings'), summary.get('currency'))}",
             f"Дистанция: {esc(summary.get('distance_km'))} км",
         ]
     )
 
 
 def order_text(order: dict[str, Any]) -> str:
-    status = order.get("status")
+    status = str(order.get("status") or "")
     status_title = order.get("status_title") or STATUS_TITLES.get(status, status)
-    category = CATEGORY_TITLES.get(order.get("category"), order.get("category"))
-    payment = PAYMENT_TITLES.get(
-        order.get("payment_method"),
-        order.get("payment_method"),
-    )
+    category_key = str(order.get("category") or "")
+    category = CATEGORY_TITLES.get(category_key, category_key)
+    payment_key = str(order.get("payment_method") or "")
+    payment = PAYMENT_TITLES.get(payment_key, payment_key)
 
     return "\n".join(
         [
@@ -126,7 +129,7 @@ def order_text(order: dict[str, Any]) -> str:
             f"Статус: <b>{esc(status_title)}</b>",
             f"Тариф: {esc(category)}",
             f"Оплата: {esc(payment)}",
-            f"Стоимость: <b>{money(order.get('price'))} {esc(order.get('currency') or 'KGS')}</b>",
+            f"Стоимость: <b>{money_with_currency(order.get('price'), order.get('currency'))}</b>",
             "",
             f"Откуда: {esc(order.get('pickup') or order.get('pickup_address'))}",
             f"Куда: {esc(order.get('destination') or order.get('destination_address'))}",
@@ -141,10 +144,7 @@ def order_text(order: dict[str, Any]) -> str:
 
 
 def order_list_line(order: dict[str, Any]) -> str:
-    status = order.get("status")
+    status = str(order.get("status") or "")
     status_title = order.get("status_title") or STATUS_TITLES.get(status, status)
-    return (
-        f"{esc(status_title)} · {money(order.get('price'))} "
-        f"{esc(order.get('currency') or 'KGS')} · "
-        f"{esc(order.get('pickup') or order.get('pickup_address'))}"
-    )
+    price = money_with_currency(order.get("price"), order.get("currency"))
+    return f"{esc(status_title)} · {price} · {esc(order.get('pickup') or order.get('pickup_address'))}"

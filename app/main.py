@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from pathlib import Path
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,6 +14,7 @@ from app.api.router import api_router
 from app.bot.runtime import get_webhook_runtime
 from app.config import get_settings
 from app.core.logging import setup_logging
+from app.services.fleet.factory import close_fleet_provider
 
 settings = get_settings()
 setup_logging(settings.LOG_LEVEL)
@@ -70,6 +71,7 @@ async def lifespan(app: FastAPI):
 
     if runtime is not None:
         await runtime.close()
+    await close_fleet_provider()
 
 
 app = FastAPI(
