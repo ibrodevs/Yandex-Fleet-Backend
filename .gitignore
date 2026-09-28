@@ -25,3 +25,5 @@ ENV/
 *.keystore
 *firebase-adminsdk*.json
 .data/
+
+.codex-ppt-build/
