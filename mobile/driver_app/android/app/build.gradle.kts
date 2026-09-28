@@ -70,6 +70,7 @@ flutter {
 }
 
 dependencies {
+    androidTestImplementation("com.google.firebase:firebase-auth")
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     implementation(platform("com.google.firebase:firebase-bom:34.7.0"))
