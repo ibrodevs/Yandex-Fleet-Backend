@@ -5,7 +5,6 @@ from typing import Any
 
 from fastapi import APIRouter, Header, HTTPException, Request
 
-from app.bot.runtime import get_webhook_runtime
 from app.config import get_settings
 
 router = APIRouter(prefix="/api/v1/telegram", tags=["telegram"])
@@ -13,6 +12,7 @@ router = APIRouter(prefix="/api/v1/telegram", tags=["telegram"])
 
 @router.get("/status")
 async def telegram_status() -> dict[str, Any]:
+    from app.bot.runtime import get_webhook_runtime
     settings = get_settings()
     payload: dict[str, Any] = {
         "mode": settings.TELEGRAM_BOT_MODE,
@@ -58,6 +58,8 @@ async def telegram_webhook(
         alias="X-Telegram-Bot-Api-Secret-Token",
     ),
 ) -> dict[str, bool]:
+    from app.bot.runtime import get_webhook_runtime
+
     settings = get_settings()
 
     if settings.TELEGRAM_BOT_MODE.lower() != "webhook":

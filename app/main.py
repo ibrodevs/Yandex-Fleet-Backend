@@ -11,7 +11,6 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.router import api_router
-from app.bot.runtime import get_webhook_runtime
 from app.config import get_settings
 from app.core.logging import setup_logging
 from app.services.fleet.factory import close_fleet_provider
@@ -41,10 +40,13 @@ async def lifespan(app: FastAPI):
     if (
         settings.TELEGRAM_BOT_MODE.lower() == "webhook"
         and settings.TELEGRAM_BOT_TOKEN
+        and settings.TELEGRAM_WEBHOOK_AUTO_SETUP
     ):
         try:
             # Local dispatcher/database initialization does not use the network
             # and must not depend on Telegram API availability.
+            from app.bot.runtime import get_webhook_runtime
+
             runtime = await get_webhook_runtime()
 
             # Telegram API calls must never block ASGI readiness. PythonAnywhere
