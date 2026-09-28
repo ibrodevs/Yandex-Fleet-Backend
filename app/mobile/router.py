@@ -70,11 +70,20 @@ class Login(BaseModel):
 
 @router.post("/auth/firebase")
 async def login(body: Login):
+    total_started = time.monotonic()
     cfg = get_settings()
     if not cfg.FIREBASE_PROJECT_ID or not cfg.FIREBASE_CREDENTIALS_FILE:
         raise HTTPException(503, "Firebase is not configured")
     try:
-        claims = await verify_phone_token(body.id_token)
+        firebase_started = time.monotonic()
+        log.info("mobile_login_firebase_verification_started")
+        try:
+            claims = await verify_phone_token(body.id_token)
+        finally:
+            log.info(
+                "mobile_login_firebase_verification_finished duration_ms=%s",
+                round((time.monotonic() - firebase_started) * 1000),
+            )
         phone = normalize_phone(
             claims.get("phone_number"), default_country_code=cfg.PHONE_DEFAULT_COUNTRY_CODE
         )
@@ -83,7 +92,15 @@ async def login(body: Login):
     except Exception:
         log.info("mobile_login_failed")
         raise HTTPException(401, "Не удалось подтвердить номер") from None
-    driver = await fleet_call("get_driver_by_phone", phone)
+    log.info("mobile_login_driver_lookup_started")
+    driver_started = time.monotonic()
+    try:
+        driver = await fleet_call("get_driver_by_phone", phone)
+    finally:
+        log.info(
+            "mobile_login_driver_lookup_finished duration_ms=%s",
+            round((time.monotonic() - driver_started) * 1000),
+        )
     if not driver or not driver.get("id"):
         log.info("mobile_login_failed")
         raise HTTPException(403, "Водитель с этим номером не найден в парке")
@@ -107,7 +124,10 @@ async def login(body: Login):
         cfg.SECRET_KEY,
         algorithm="HS256",
     )
-    log.info("mobile_login_success")
+    log.info(
+        "mobile_login_success total_duration_ms=%s",
+        round((time.monotonic() - total_started) * 1000),
+    )
     return {"access_token": token, "token_type": "bearer", "expires_at": expires}
 
 

@@ -28,7 +28,7 @@ async def verify_phone_token(token: str):
         auth.verify_id_token,
         token,
         app=firebase_app(),
-        check_revoked=True,
+        check_revoked=False,
     )
 
 
