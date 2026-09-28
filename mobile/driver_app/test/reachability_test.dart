@@ -132,6 +132,66 @@ void main() {
     },
   );
 
+  test('profile is applied while orders request is still pending', () async {
+    final profileLoaded = Completer<void>();
+    state.addListener(() {
+      if (state.driver['id'] == 'driver' && !profileLoaded.isCompleted) {
+        profileLoaded.complete();
+      }
+    });
+
+    final refresh = state.refresh();
+    await requests.waitFor(5);
+    requests.success('/me', {'id': 'driver', 'first_name': 'Fresh driver'});
+    await profileLoaded.future;
+
+    expect(state.driver['first_name'], 'Fresh driver');
+    expect(requests.pending.containsKey('/orders'), isTrue);
+
+    requests.fail('/summary', status: 503);
+    requests.success('/vehicle', null);
+    requests.success('/settings', {});
+    requests.success('/orders', []);
+    await refresh;
+
+    expect(state.orders, isEmpty);
+    expect(state.error, contains('временно недоступны'));
+  });
+
+  for (final testLogin in [false, true]) {
+    test(
+      '${testLogin ? 'test' : 'Firebase'} login notifies after JWT before refresh completes',
+      () async {
+        final signedInNotice = Completer<void>();
+        state.addListener(() {
+          if (state.signedIn && !signedInNotice.isCompleted) {
+            signedInNotice.complete();
+          }
+        });
+
+        final login = testLogin
+            ? state.loginWithTestCredentials('+79022558511', '123456')
+            : state.loginWithFirebaseToken('firebase-id-token');
+        final loginPath = testLogin ? '/auth/test' : '/auth/firebase';
+        await requests.waitFor(1);
+        requests.success(loginPath, {'access_token': 'mobile-jwt'});
+        await signedInNotice.future;
+        await requests.waitFor(6);
+
+        expect(state.signedIn, isTrue);
+        expect(
+          requests.paths,
+          containsAll(['/me', '/summary', '/vehicle', '/orders', '/settings']),
+        );
+
+        for (final entry in refreshData.entries) {
+          requests.success(entry.key, entry.value);
+        }
+        await login;
+      },
+    );
+  }
+
   test('HTTP 503 clears offline and surfaces service error despite cached settings', () async {
     await offline();
     final refresh = state.refresh();

@@ -71,6 +71,7 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     try {
       await api.login(idToken);
+      notifyListeners();
       await refresh();
       await registerPush();
     } finally {
@@ -85,6 +86,7 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     try {
       await api.testLogin(phone, code);
+      notifyListeners();
       await refresh();
       await registerPush();
     } finally {
@@ -99,36 +101,60 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> _refresh() async {
-    if (!signedIn) {
-      return;
-    }
-    try {
-      final values = await Future.wait(
-        ['/me', '/summary', '/vehicle', '/orders', '/settings'].map(api.get),
-      );
-      if (!signedIn) {
-        return;
+    if (!signedIn) return;
+
+    String? firstError;
+
+    Future<void> load(
+      String path,
+      Future<void> Function(dynamic value) apply,
+    ) async {
+      try {
+        final value = await api.get(path);
+
+        if (!signedIn) return;
+
+        await apply(value);
+        notifyListeners();
+      } catch (e) {
+        firstError ??= errorMessage(e);
       }
-      driver = Map<String, dynamic>.from(values[0]);
-      summary = Map<String, dynamic>.from(values[1] ?? {});
-      vehicle = Map<String, dynamic>.from(values[2] ?? {});
-      orders = (values[3] as List)
-          .map((o) => FleetOrder(Map<String, dynamic>.from(o)))
-          .toList();
-      settings = OverlaySettings(Map<String, dynamic>.from(values[4]));
-      if (Platform.isAndroid) {
-        await overlayChannel.invokeMethod(
-          'setSession',
-          driver['id']?.toString(),
-        );
-        await overlayChannel.invokeMethod('setSettings', settings.data);
-        driverMode =
-            await overlayChannel.invokeMethod<bool>('getDriverMode') ?? false;
-      }
-      error = null;
-    } catch (e) {
-      error = errorMessage(e);
     }
+
+    await Future.wait([
+      load('/me', (value) async {
+        driver = Map<String, dynamic>.from(value);
+
+        if (Platform.isAndroid) {
+          await overlayChannel.invokeMethod(
+            'setSession',
+            driver['id']?.toString(),
+          );
+        }
+      }),
+      load('/summary', (value) async {
+        summary = Map<String, dynamic>.from(value ?? {});
+      }),
+      load('/vehicle', (value) async {
+        vehicle = Map<String, dynamic>.from(value ?? {});
+      }),
+      load('/orders', (value) async {
+        orders = (value as List)
+            .map((o) => FleetOrder(Map<String, dynamic>.from(o)))
+            .toList();
+      }),
+      load('/settings', (value) async {
+        settings = OverlaySettings(Map<String, dynamic>.from(value));
+
+        if (Platform.isAndroid) {
+          await overlayChannel.invokeMethod('setSettings', settings.data);
+          driverMode =
+              await overlayChannel.invokeMethod<bool>('getDriverMode') ?? false;
+        }
+      }),
+    ]);
+
+    error = firstError;
     notifyListeners();
   }
 
