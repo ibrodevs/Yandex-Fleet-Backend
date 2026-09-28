@@ -12,8 +12,10 @@ Future<void> main() async {
   try {
     await Firebase.initializeApp();
     firebaseReady = true;
-  } catch (_) {
-    /* Configuration is supplied by the project owner. */
+    debugPrint('[FIREBASE] initializeApp OK');
+  } catch (e, stack) {
+    debugPrint('[FIREBASE] initializeApp FAILED: $e');
+    debugPrintStack(stackTrace: stack);
   }
   final state = AppState(FleetApi(), firebaseReady);
   runApp(

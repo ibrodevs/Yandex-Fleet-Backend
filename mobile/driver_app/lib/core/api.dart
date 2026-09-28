@@ -119,8 +119,9 @@ class FleetApi extends ChangeNotifier {
 
   Future<void> login(String idToken) async {
     final response = await post('/auth/firebase', data: {'id_token': idToken});
-    token = response.data['access_token'];
-    await storage.write(key: 'jwt', value: token);
+    final accessToken = response.data['access_token'] as String;
+    await storage.write(key: 'jwt', value: accessToken);
+    token = accessToken;
   }
 
   Future<dynamic> get(String path) async {

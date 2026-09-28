@@ -65,21 +65,14 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  Future<void> authenticate(PhoneAuthCredential credential) async {
+  Future<void> loginWithFirebaseToken(String idToken) async {
     busy = true;
     error = null;
     notifyListeners();
     try {
-      final result = await FirebaseAuth.instance.signInWithCredential(
-        credential,
-      );
-      final token = await result.user!.getIdToken(true);
-      await api.login(token!);
+      await api.login(idToken);
       await refresh();
       await registerPush();
-    } catch (e) {
-      error = errorMessage(e);
-      rethrow;
     } finally {
       busy = false;
       notifyListeners();

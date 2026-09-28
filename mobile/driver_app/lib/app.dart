@@ -1,11 +1,11 @@
 import 'dart:io';
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import 'core/api.dart';
 import 'core/models.dart';
+import 'core/phone_login.dart';
 import 'core/state.dart';
 
 const lime = Color(0xFFD8F36A);
@@ -113,72 +113,36 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final phone = TextEditingController(), code = TextEditingController();
-  String? verification, error;
-  bool sending = false;
+  late final PhoneLoginController login;
+  String? get verification => login.verificationId;
+  String? get error => login.error;
+  bool get sending => login.busy;
+
+  @override
+  void initState() {
+    super.initState();
+    login = PhoneLoginController(
+      gateway: FirebasePhoneAuthGateway(),
+      exchangeToken: widget.state.loginWithFirebaseToken,
+    )..addListener(_changed);
+  }
+
+  void _changed() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
+    login.removeListener(_changed);
+    login.dispose();
     phone.dispose();
     code.dispose();
     super.dispose();
   }
 
-  Future<void> verify(PhoneAuthCredential c) async {
-    try {
-      await widget.state.authenticate(c);
-    } catch (_) {
-      if (mounted) {
-        setState(() => error = widget.state.error);
-      }
-    }
-  }
-
-  Future<void> submit() async {
-    setState(() {
-      sending = true;
-      error = null;
-    });
-    try {
-      if (verification != null) {
-        await verify(
-          PhoneAuthProvider.credential(
-            verificationId: verification!,
-            smsCode: code.text.trim(),
-          ),
-        );
-      } else {
-        final number = phone.text.replaceAll(RegExp(r'[\s()-]'), '');
-        if (!RegExp(r'^\+[1-9]\d{6,14}$').hasMatch(number)) {
-          setState(() => error = 'Введите номер с кодом страны, например +996');
-          return;
-        }
-        await FirebaseAuth.instance.verifyPhoneNumber(
-          phoneNumber: number,
-          verificationCompleted: verify,
-          verificationFailed: (_) {
-            if (mounted) {
-              setState(
-                () => error = 'Не удалось отправить код. Проверьте номер и повторите позже.',
-              );
-            }
-          },
-          codeSent: (id, _) {
-            if (mounted) {
-              setState(() => verification = id);
-            }
-          },
-          codeAutoRetrievalTimeout: (_) {},
-        );
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() => error = 'Проверьте код и подключение к интернету.');
-      }
-    } finally {
-      if (mounted) {
-        setState(() => sending = false);
-      }
-    }
-  }
+  Future<void> submit() => verification != null || login.numberVerified
+      ? login.submitCode(code.text)
+      : login.request(phone.text);
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -235,6 +199,8 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 16),
               TextField(
+                key: ValueKey(verification == null ? 'phone' : 'sms-code'),
+                enabled: !sending && !login.numberVerified,
                 controller: verification == null ? phone : code,
                 keyboardType: verification == null
                     ? TextInputType.phone
@@ -273,6 +239,8 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Text(
                   sending
                       ? 'Подождите…'
+                      : login.numberVerified
+                      ? 'Повторить вход'
                       : verification == null
                       ? 'Получить код'
                       : 'Войти',
@@ -280,8 +248,23 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               if (verification != null)
                 TextButton(
-                  onPressed: () => setState(() => verification = null),
-                  child: const Text('Изменить номер / повторить отправку'),
+                  onPressed: sending
+                      ? null
+                      : () {
+                          code.clear();
+                          login.changePhone();
+                        },
+                  child: const Text('Изменить номер'),
+                ),
+              if (verification != null && !login.numberVerified)
+                TextButton(
+                  onPressed: sending
+                      ? null
+                      : () {
+                          code.clear();
+                          login.request(phone.text, resend: true);
+                        },
+                  child: const Text('Запросить код повторно'),
                 ),
               const SizedBox(height: 22),
               const Text(
