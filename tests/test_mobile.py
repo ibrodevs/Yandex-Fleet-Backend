@@ -92,7 +92,11 @@ async def test_test_login_requires_allowlisted_phone_and_code(client, monkeypatc
     cfg = get_settings()
     monkeypatch.setattr(cfg, "MOBILE_TEST_AUTH_ENABLED", True)
     monkeypatch.setattr(cfg, "MOBILE_TEST_AUTH_CODE", "123456")
-    monkeypatch.setattr(cfg, "MOBILE_TEST_AUTH_PHONES", "+79022558511,+79222112992")
+    monkeypatch.setattr(
+        cfg,
+        "MOBILE_TEST_AUTH_DRIVERS",
+        "+79022558511:driver-one,+79222112992:driver-two",
+    )
 
     for payload in [
         {"phone": "+79022558512", "code": "123456"},
@@ -108,7 +112,11 @@ async def test_test_login_creates_normal_mobile_session(client, monkeypatch):
     cfg = get_settings()
     monkeypatch.setattr(cfg, "MOBILE_TEST_AUTH_ENABLED", True)
     monkeypatch.setattr(cfg, "MOBILE_TEST_AUTH_CODE", "123456")
-    monkeypatch.setattr(cfg, "MOBILE_TEST_AUTH_PHONES", "+79022558511,+79222112992")
+    monkeypatch.setattr(
+        cfg,
+        "MOBILE_TEST_AUTH_DRIVERS",
+        "+79022558511:driver-one,+79222112992:driver-two",
+    )
 
     result = await c.post(
         "/api/v1/mobile/auth/test",
@@ -123,9 +131,9 @@ async def test_test_login_creates_normal_mobile_session(client, monkeypatch):
         audience="fleet-mobile",
         issuer="fleet-backend",
     )
-    assert claims["driver_id"] == "a"
+    assert claims["driver_id"] == "driver-one"
     assert claims["phone"] == "+79022558511"
-    provider.get_driver_by_phone.assert_awaited_once_with("+79022558511")
+    provider.get_driver_by_phone.assert_not_awaited()
 
     c.headers["Authorization"] = "Bearer " + access_token
     assert (await c.get("/api/v1/mobile/me")).json()["id"] == "a"
