@@ -65,6 +65,17 @@ class DriverLinkStore:
                 return None
             return DriverLink(**dict(row))
 
+    async def get_by_driver_id(self, driver_id: str) -> DriverLink | None:
+        """Resolve the current unique Telegram binding without caching old recipients."""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                "SELECT * FROM telegram_driver_links WHERE driver_id = ?",
+                (driver_id,),
+            )
+            row = await cursor.fetchone()
+            return DriverLink(**dict(row)) if row else None
+
     async def get_driver_id(self, telegram_user_id: int) -> str | None:
         link = await self.get(telegram_user_id)
         return link.driver_id if link else None

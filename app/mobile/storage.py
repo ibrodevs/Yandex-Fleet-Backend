@@ -25,6 +25,14 @@ CREATE TABLE IF NOT EXISTS mobile_order_events (
 CREATE TABLE IF NOT EXISTS mobile_deliveries (
  event_id INTEGER NOT NULL, device_id TEXT NOT NULL, sent_at TEXT,
  PRIMARY KEY(event_id, device_id));
+CREATE TABLE IF NOT EXISTS mobile_telegram_deliveries (
+ event_id INTEGER PRIMARY KEY, telegram_user_id INTEGER NOT NULL,
+ message_id INTEGER, sent_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS mobile_delivery_attempts (
+ event_id INTEGER NOT NULL, channel TEXT NOT NULL, recipient_id TEXT NOT NULL,
+ attempts INTEGER NOT NULL DEFAULT 0, last_attempt_at REAL,
+ next_attempt_at REAL NOT NULL DEFAULT 0, last_error_type TEXT,
+ PRIMARY KEY(event_id, channel, recipient_id));
 """
 
 

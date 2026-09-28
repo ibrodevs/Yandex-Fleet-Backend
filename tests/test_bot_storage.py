@@ -75,3 +75,23 @@ async def test_driver_link_transfers_to_new_telegram_user(tmp_path: Path):
     link = await store.get(2002)
     assert link is not None
     assert link.driver_id == "driver-001"
+
+
+async def test_reverse_driver_lookup_tracks_transfer_and_unlink(tmp_path):
+    store = DriverLinkStore(str(tmp_path / "links.sqlite3"))
+    await store.init()
+    assert await store.get_by_driver_id("missing") is None
+    for user in (1, 2):
+        await store.link(
+            telegram_user_id=user,
+            driver_id="driver",
+            phone=None,
+            username=None,
+            first_name=None,
+            last_name=None,
+        )
+        reopened = DriverLinkStore(str(store.db_path))
+        assert (await reopened.get_by_driver_id("driver")).telegram_user_id == user
+    assert await store.get_by_driver_id("driver' OR 1=1 --") is None
+    await store.unlink(2)
+    assert await store.get_by_driver_id("driver") is None

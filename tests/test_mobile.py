@@ -15,6 +15,7 @@ from app.mobile.worker import MobileOrderWatcher
 @pytest.fixture
 async def client(tmp_path, monkeypatch):
     cfg = get_settings()
+    monkeypatch.setattr(cfg, "TELEGRAM_BOT_TOKEN", None)
     monkeypatch.setattr(cfg, "MOBILE_DB_PATH", str(tmp_path / "mobile.db"))
     monkeypatch.setattr(cfg, "YANDEX_MOCK_MODE", False)
     monkeypatch.setattr(cfg, "SECRET_KEY", "mobile-test-secret-" * 3)

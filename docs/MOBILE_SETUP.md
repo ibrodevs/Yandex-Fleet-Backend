@@ -46,9 +46,23 @@ FIREBASE_CREDENTIALS_FILE=/absolute/private/path/firebase-admin.json
 cd /path/to/Yandex-Fleet-Backend && /path/to/.venv/bin/python -m app.mobile.worker
 ```
 
-Не добавляйте цикл в ASGI startup. Worker запрашивает список заказов парка через существующий provider, сохраняет NEW_ORDER с уникальностью driver/order/type, отправляет high-priority FCM data message. Существующая пагинация, лимиты и lookback Yandex provider сохраняются. Активные заказы первого запуска считаются обнаруженными; завершённые и отменённые не отправляются. Неотправленные события повторяются максимум 2 минуты и только пока заказ присутствует среди активных. Успех хранится отдельно по каждому устройству. Lock-файл запрещает второй worker на том же узле.
+Не добавляйте цикл в ASGI startup. Единственный `python -m app.mobile.worker` запрашивает список заказов парка один раз за цикл через существующий provider и обслуживает **FCM и Telegram**. Yandex-интеграция, Telegram webhook и их настройки не меняются. Существующая пагинация, лимиты и lookback provider сохраняются. Активные заказы (`assigned`, `waiting`, `in_progress`) первого запуска считаются обнаруженными; завершённые и отменённые не создают события.
 
-FCM не гарантирует exactly-once или моментальную доставку. При падении между отправкой и записью возможна повторная доставка; Android подавляет повтор одного order_id локально (последние 300 событий). Удалённые/просроченные сессии и отключённые устройства исключены из отправки. Worker не получает оффер раньше официального Fleet API.
+Общее событие `NEW_ORDER` имеет уникальность driver/order/type. Неудачные доставки повторяются независимо при следующих циклах, максимум **30 минут с первого обнаружения**, только пока тот же driver/order присутствует в актуальном списке активных заказов. После ошибки опроса отправка откладывается до следующего успешного опроса. Повтор использует последние поля и статус заказа; время обнаружения не сбрасывается. Каждая попытка ограничена 30 секундами. Telegram `retry_after` сохраняется в БД и соблюдается после перезапуска; пауза Telegram не задерживает FCM.
+
+Хранение (таблицы автоматически добавляются в существующую mobile.sqlite3 без удаления старых данных):
+
+- `mobile_deliveries`: прежняя FCM-dedup по event/device; успешные устройства не получают повтор при ошибке другого устройства.
+- `mobile_telegram_deliveries`: один подтверждённый успех на event, с Telegram user ID, message ID и временем. Перепривязка после успешной отправки не уведомляет о том же событии заново.
+- `mobile_delivery_attempts`: число попыток, время последней попытки, следующий допустимый retry и тип ошибки отдельно для event/channel/recipient.
+
+Перед каждой Telegram-попыткой `DriverLinkStore.get_by_driver_id()` читает текущую привязку из `TELEGRAM_BOT_DB_PATH`. Отсутствие привязки не блокирует мобильную доставку; если привязка появится в пределах окна, событие может доставиться в Telegram. Для Telegram не нужны mobile session или FCM device. Используются существующие `TELEGRAM_BOT_TOKEN`, `TELEGRAM_HTTP_PROXY` и HTML-presenter бота. Worker только отправляет сообщения: `getUpdates`, настройка webhook и второй polling-процесс не запускаются.
+
+`MOBILE_ORDER_WATCHER_ENABLED=false` выключает весь watcher. `MOBILE_ENABLED=false` выключает только FCM-ветку и мобильный API, Telegram watcher продолжает работать. Мобильная настройка `notifications=false` также относится только к FCM. Отсутствующий bot token отключает Telegram-ветку, ошибка/отсутствие Firebase не препятствует Telegram. Lock-файл запрещает второй worker на том же узле. Для web и worker требуются одинаковые абсолютные пути к mobile.sqlite3 и Telegram-БД.
+
+Structured JSON logs включают `order_watcher_started`, `order_watcher_poll_started/completed/failed`, `new_order_detected`, `order_delivery_attempt/sent/failed/skipped/deduplicated`, `order_delivery_channel_failed/disabled`. Поля: tick/event/order/driver ID, channel, recipient ID, attempt, duration_ms, reason, error_type и next_attempt_at. Токены, номера телефонов, адреса, содержимое сообщения и текст SDK-исключения не логируются. Успех одного канала не считается успехом другого.
+
+FCM и Telegram не предоставляют здесь транзакцию совместно с SQLite: при падении между принятием сообщения провайдером и записью успеха, либо неопределённом результате timeout, возможен повтор. Durable dedup подавляет подтверждённые успешные доставки; абсолютная exactly-once доставка не обещается. Android дополнительно подавляет повтор одного order_id локально (последние 300 событий). Удалённые/просроченные мобильные сессии и отключённые устройства исключены из FCM. Worker не получает оффер раньше официального Fleet API.
 
 ## Сборка Android
 
