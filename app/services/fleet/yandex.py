@@ -94,21 +94,26 @@ class YandexFleetProvider(FleetProvider):
         return date_from or start.isoformat(), date_to or now.isoformat()
 
     async def _driver_profiles_snapshot(self) -> list[dict[str, Any]]:
+        async def stale_refresh() -> list[dict[str, Any]]:
+            return await self.client.list_driver_profiles(retry_safe=False)
+
         return await self._translate(
             self.cache.get_or_refresh(
                 "drivers:park:default",
                 ttl_seconds=self.settings.YANDEX_DRIVER_CACHE_TTL_SECONDS,
                 stale_seconds=self.settings.YANDEX_CACHE_STALE_SECONDS,
                 refresh=self.client.list_driver_profiles,
+                stale_refresh=stale_refresh,
             )
         )
 
     async def _park_orders_snapshot(self) -> list[dict[str, Any]]:
-        async def refresh() -> list[dict[str, Any]]:
+        async def refresh(*, retry_safe: bool = True) -> list[dict[str, Any]]:
             booked_from, booked_to = self._date_range()
             return await self.client.list_orders(
                 booked_from=booked_from,
                 booked_to=booked_to,
+                retry_safe=retry_safe,
             )
 
         return await self._translate(
@@ -117,6 +122,7 @@ class YandexFleetProvider(FleetProvider):
                 ttl_seconds=self.settings.YANDEX_ORDERS_CACHE_TTL_SECONDS,
                 stale_seconds=self.settings.YANDEX_CACHE_STALE_SECONDS,
                 refresh=refresh,
+                stale_refresh=lambda: refresh(retry_safe=False),
             )
         )
 

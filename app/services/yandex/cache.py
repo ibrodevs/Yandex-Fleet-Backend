@@ -177,6 +177,7 @@ class SharedYandexCache:
         ttl_seconds: float,
         stale_seconds: float,
         refresh: Callable[[], Awaitable[T]],
+        stale_refresh: Callable[[], Awaitable[T]] | None = None,
     ) -> T:
         entry = await self.get(cache_key)
         age = self._age(entry) if entry else None
@@ -218,8 +219,14 @@ class SharedYandexCache:
                 age_seconds=round(locked_age, 3) if locked_age is not None else None,
                 ttl_seconds=ttl_seconds,
             )
+            can_serve_stale = bool(
+                locked_entry
+                and locked_age is not None
+                and locked_age <= ttl_seconds + stale_seconds
+            )
+            refresh_call = stale_refresh if can_serve_stale and stale_refresh else refresh
             try:
-                payload = await refresh()
+                payload = await refresh_call()
             except YandexAuthError as exc:
                 log_event(
                     logger,
@@ -240,9 +247,8 @@ class SharedYandexCache:
                     error_type=type(exc).__name__,
                 )
                 if (
-                    locked_entry
-                    and locked_age is not None
-                    and locked_age <= ttl_seconds + stale_seconds
+                    can_serve_stale
+                    and locked_entry
                     and self._temporary_error(exc)
                 ):
                     log_event(

@@ -1,6 +1,8 @@
 import asyncio
+import time
 from copy import deepcopy
 
+import httpx
 import pytest
 
 from app.config import Settings
@@ -8,6 +10,7 @@ from app.core.exceptions import YandexRateLimitError
 from app.services.fleet.base import FleetProviderError
 from app.services.fleet.yandex import YandexFleetProvider
 from app.services.yandex.cache import SharedYandexCache
+from app.services.yandex.client import YandexFleetClient
 from tests.test_yandex_mappers import driver_fixture, order_fixture
 
 
@@ -19,7 +22,13 @@ class FakeYandexClient:
         self.order_calls = []
         self.profile_calls = 0
 
-    async def list_driver_profiles(self, *, driver_profile_ids=None, max_records=None):
+    async def list_driver_profiles(
+        self,
+        *,
+        driver_profile_ids=None,
+        max_records=None,
+        retry_safe=True,
+    ):
         self.profile_calls += 1
         items = deepcopy(self.profiles)
         if driver_profile_ids:
@@ -191,3 +200,56 @@ async def test_too_old_orders_snapshot_preserves_provider_error(tmp_path):
 
     with pytest.raises(FleetProviderError, match="ограничил частоту"):
         await provider.list_orders()
+
+
+@pytest.mark.asyncio
+async def test_stale_orders_skip_long_retry_after_and_can_refresh_later(tmp_path):
+    now = [100.0]
+    request_count = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal request_count
+        request_count += 1
+        if request_count == 1:
+            return httpx.Response(
+                429,
+                headers={"Retry-After": "60"},
+                json={"message": "Slow down"},
+                request=request,
+            )
+        fresh = order_fixture()
+        fresh["id"] = "order-fresh"
+        return httpx.Response(
+            200,
+            json={"orders": [fresh]},
+            request=request,
+        )
+
+    cfg = settings(
+        tmp_path,
+        YANDEX_RETRY_ATTEMPTS=3,
+        YANDEX_ORDERS_CACHE_TTL_SECONDS=10,
+        YANDEX_CACHE_STALE_SECONDS=60,
+    )
+    http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    client = YandexFleetClient(
+        http,
+        settings=cfg,
+        jitter=lambda _start, _end: 0.1,
+    )
+    cache = SharedYandexCache(cfg.YANDEX_CACHE_DB_PATH, clock=lambda: now[0])
+    await cache.set("orders:park:default", [order_fixture()])
+    now[0] += 11
+    provider = YandexFleetProvider(client, settings=cfg, cache=cache)
+
+    started = time.monotonic()
+    stale = await asyncio.wait_for(provider.list_orders(), timeout=0.5)
+
+    assert time.monotonic() - started < 0.5
+    assert [item["id"] for item in stale] == ["order-1"]
+    assert request_count == 1
+
+    refreshed = await provider.list_orders()
+    assert [item["id"] for item in refreshed] == ["order-fresh"]
+    assert request_count == 2
+    await http.aclose()

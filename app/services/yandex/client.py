@@ -260,6 +260,7 @@ class YandexFleetClient:
         *,
         driver_profile_ids: list[str] | None = None,
         max_records: int | None = None,
+        retry_safe: bool = True,
     ) -> list[dict[str, Any]]:
         page_size, max_pages, record_limit = self._limits(max_records, 1000)
         offset = 0
@@ -273,6 +274,7 @@ class YandexFleetClient:
                 "POST",
                 DRIVER_PROFILES_PATH,
                 json={"query": {"park": park}, "limit": page_size, "offset": offset},
+                retry_safe=retry_safe,
             )
             items = payload.get("driver_profiles") or []
             if not isinstance(items, list):
@@ -334,6 +336,7 @@ class YandexFleetClient:
         order_ids: list[str] | None = None,
         statuses: list[str] | None = None,
         max_records: int | None = None,
+        retry_safe: bool = True,
     ) -> list[dict[str, Any]]:
         page_size, max_pages, record_limit = self._limits(max_records, 500)
         result: list[dict[str, Any]] = []
@@ -355,7 +358,12 @@ class YandexFleetClient:
             if cursor:
                 body["cursor"] = cursor
 
-            payload = await self._request("POST", ORDERS_PATH, json=body)
+            payload = await self._request(
+                "POST",
+                ORDERS_PATH,
+                json=body,
+                retry_safe=retry_safe,
+            )
             items = payload.get("orders") or []
             if not isinstance(items, list):
                 raise YandexApiError("Yandex orders response is malformed.")
