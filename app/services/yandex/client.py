@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import random
 import time
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 from typing import Any
 
 import httpx
@@ -28,11 +31,15 @@ class YandexFleetClient:
         *,
         settings: Settings | None = None,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        jitter: Callable[[float, float], float] = random.uniform,
+        wall_clock: Callable[[], float] = time.time,
     ) -> None:
         self.settings = settings or get_settings()
         self._client = client
         self._owns_client = client is None
         self._sleep = sleep
+        self._jitter = jitter
+        self._wall_clock = wall_clock
 
     def _headers(self) -> dict[str, str]:
         if not self.settings.YANDEX_CLIENT_ID or not self.settings.YANDEX_API_KEY:
@@ -80,6 +87,52 @@ class YandexFleetClient:
                 details["upstream_message"] = str(payload["message"])[:500]
         return details
 
+    def _retry_delay(
+        self,
+        attempt: int,
+        response: httpx.Response | None = None,
+    ) -> float:
+        delay: float | None = None
+        retry_after = response.headers.get("Retry-After") if response is not None else None
+        if retry_after:
+            try:
+                delay = max(0.0, float(retry_after))
+            except ValueError:
+                try:
+                    retry_at = parsedate_to_datetime(retry_after)
+                    if retry_at.tzinfo is None:
+                        retry_at = retry_at.replace(tzinfo=UTC)
+                    delay = max(
+                        0.0,
+                        retry_at.timestamp() - datetime.fromtimestamp(
+                            self._wall_clock(),
+                            tz=UTC,
+                        ).timestamp(),
+                    )
+                except (TypeError, ValueError, OverflowError):
+                    delay = None
+        if delay is None:
+            delay = float(2 ** (attempt - 1))
+        return delay + self._jitter(0.1, 0.5)
+
+    async def _retry_wait(
+        self,
+        *,
+        path: str,
+        attempt: int,
+        response: httpx.Response | None = None,
+    ) -> None:
+        delay = self._retry_delay(attempt, response)
+        log_event(
+            logger,
+            "yandex_retry_scheduled",
+            endpoint=path,
+            attempt=attempt,
+            status_code=response.status_code if response is not None else None,
+            delay_seconds=round(delay, 3),
+        )
+        await self._sleep(delay)
+
     async def _request(
         self,
         method: str,
@@ -112,7 +165,7 @@ class YandexFleetClient:
                     duration_ms=round((time.monotonic() - started) * 1000),
                 )
                 if retry_safe and attempt < attempts:
-                    await self._sleep(2 ** (attempt - 1))
+                    await self._retry_wait(path=path, attempt=attempt)
                     continue
                 raise YandexApiError(
                     "Yandex Fleet API request timed out.",
@@ -129,7 +182,7 @@ class YandexFleetClient:
                     error_type=type(exc).__name__,
                 )
                 if retry_safe and attempt < attempts:
-                    await self._sleep(2 ** (attempt - 1))
+                    await self._retry_wait(path=path, attempt=attempt)
                     continue
                 raise YandexApiError(
                     "Yandex Fleet API network error.",
@@ -155,11 +208,19 @@ class YandexFleetClient:
                 )
             if response.status_code == 429:
                 if retry_safe and attempt < attempts:
-                    await self._sleep(2 ** (attempt - 1))
+                    await self._retry_wait(
+                        path=path,
+                        attempt=attempt,
+                        response=response,
+                    )
                     continue
                 raise YandexRateLimitError(details=self._error_details(response))
             if response.status_code >= 500 and retry_safe and attempt < attempts:
-                await self._sleep(2 ** (attempt - 1))
+                await self._retry_wait(
+                    path=path,
+                    attempt=attempt,
+                    response=response,
+                )
                 continue
             if response.status_code >= 400:
                 raise YandexApiError(

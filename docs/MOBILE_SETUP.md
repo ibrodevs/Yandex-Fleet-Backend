@@ -25,6 +25,10 @@ uv pip install -r requirements.txt
 ```dotenv
 APP_ENV=production
 YANDEX_MOCK_MODE=false
+YANDEX_CACHE_DB_PATH=/home/yandexfeetbackend21/Yandex-Fleet-Backend/.data/yandex_cache.sqlite3
+YANDEX_DRIVER_CACHE_TTL_SECONDS=60
+YANDEX_ORDERS_CACHE_TTL_SECONDS=10
+YANDEX_CACHE_STALE_SECONDS=60
 MOBILE_ENABLED=true
 MOBILE_DB_PATH=/absolute/private/path/mobile.sqlite3
 MOBILE_JWT_EXPIRE_DAYS=30
@@ -34,7 +38,9 @@ FIREBASE_PROJECT_ID=your-project
 FIREBASE_CREDENTIALS_FILE=/absolute/private/path/firebase-admin.json
 ```
 
-`SECRET_KEY` должен быть случайным, минимум 32 символа: `python -c 'import secrets; print(secrets.token_urlsafe(48))'`. Не меняйте существующий production SECRET_KEY без плана завершения старых сессий. Все web/worker процессы должны использовать одинаковые параметры и путь к mobile.sqlite3. SQLite автоматически создаёт мобильные таблицы при первом мобильном запросе, без изменения основной схемы backend. Файл содержит персональные данные и FCM tokens; храните его в приватном каталоге с резервным копированием. Подходит для одного узла PythonAnywhere, не для нескольких независимых серверов.
+`SECRET_KEY` должен быть случайным, минимум 32 символа: `python -c 'import secrets; print(secrets.token_urlsafe(48))'`. Не меняйте существующий production SECRET_KEY без плана завершения старых сессий. Все web/worker процессы должны использовать одинаковые параметры и абсолютные пути к `mobile.sqlite3` и `yandex_cache.sqlite3`. SQLite автоматически создаёт мобильные таблицы и общий кэш при первом обращении. Файлы храните в приватном каталоге с резервным копированием. Подходит для одного узла PythonAnywhere, не для нескольких независимых серверов.
+
+Web и единственный worker читают общий SQLite-кэш Yandex Fleet. Полный снимок водителей обновляется не чаще одного раза в 60 секунд, а снимок заказов всего парка — не чаще одного раза в 10 секунд; фильтрация заказов конкретного водителя выполняется локально. Межпроцессный lock и повторная проверка кэша не позволяют web и worker одновременно обновлять один снимок. При `429`, `5xx`, timeout или сетевой ошибке разрешена выдача последнего снимка ещё максимум 60 секунд после TTL. Ошибки `401/403` кэшем не скрываются. Источником истины остаётся Yandex Fleet, кэш только ограничивает частоту чтения; polling выполняет только отдельный worker.
 
 Перезапустите web app после установки зависимостей. Web startup не обращается к Firebase и не запускает watcher. Отсутствие Firebase не ломает Telegram и `/health/ready`. Мобильный login возвращает 503 до настройки Firebase.
 

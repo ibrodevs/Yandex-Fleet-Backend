@@ -5,11 +5,15 @@ import httpx
 import jwt
 import pytest
 
-from app.config import get_settings
+from app.config import Settings, get_settings
+from app.core.exceptions import YandexRateLimitError
 from app.main import app
 from app.mobile import router as mobile
 from app.mobile.storage import database
 from app.mobile.worker import MobileOrderWatcher
+from app.services.fleet.yandex import YandexFleetProvider
+from app.services.yandex.cache import SharedYandexCache
+from tests.test_yandex_mappers import order_fixture
 
 
 @pytest.fixture
@@ -141,6 +145,51 @@ async def test_expired_session(client):
     async with database() as db:
         await db.execute("UPDATE mobile_sessions SET expires_at=?", (int(time.time()) - 1,))
     assert (await c.get("/api/v1/mobile/orders")).status_code == 401
+
+
+async def test_mobile_orders_serves_bounded_stale_snapshot_on_yandex_429(
+    client, tmp_path, monkeypatch
+):
+    c, _ = client
+    await login(c)
+    now = [100.0]
+
+    class RateLimitedAfterFirstCall:
+        def __init__(self):
+            self.calls = 0
+
+        async def list_orders(self, **_kwargs):
+            self.calls += 1
+            if self.calls > 1:
+                raise YandexRateLimitError()
+            order = order_fixture()
+            order["driver_profile"] = {"id": "a", "name": "Тест"}
+            return [order]
+
+        async def aclose(self):
+            return None
+
+    cfg = Settings(
+        YANDEX_CLIENT_ID="test-client",
+        YANDEX_API_KEY="test-key",
+        YANDEX_PARK_ID="test-park",
+        YANDEX_MOCK_MODE=False,
+        YANDEX_CACHE_DB_PATH=str(tmp_path / "yandex-cache.sqlite3"),
+        YANDEX_ORDERS_CACHE_TTL_SECONDS=10,
+        YANDEX_CACHE_STALE_SECONDS=60,
+    )
+    yandex_client = RateLimitedAfterFirstCall()
+    cache = SharedYandexCache(cfg.YANDEX_CACHE_DB_PATH, clock=lambda: now[0])
+    provider = YandexFleetProvider(yandex_client, settings=cfg, cache=cache)
+    assert len(await provider.list_orders()) == 1
+    now[0] += 11
+    monkeypatch.setattr(mobile, "get_fleet_provider", lambda: provider)
+
+    response = await c.get("/api/v1/mobile/orders")
+
+    assert response.status_code == 200
+    assert [item["id"] for item in response.json()] == ["order-1"]
+    assert yandex_client.calls == 2
 
 
 async def test_completed_order_is_not_retried(client):

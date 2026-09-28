@@ -14,6 +14,7 @@ from app.services.fleet.yandex_mappers import (
     map_yandex_order,
     map_yandex_vehicle,
 )
+from app.services.yandex.cache import SharedYandexCache
 from app.services.yandex.client import YandexFleetClient
 
 logger = get_logger(__name__)
@@ -35,9 +36,11 @@ class YandexFleetProvider(FleetProvider):
         client: YandexFleetClient | None = None,
         *,
         settings: Settings | None = None,
+        cache: SharedYandexCache | None = None,
     ) -> None:
         self.settings = settings or get_settings()
         self.client = client or YandexFleetClient(settings=self.settings)
+        self.cache = cache or SharedYandexCache(self.settings.YANDEX_CACHE_DB_PATH)
 
     async def aclose(self) -> None:
         await self.client.aclose()
@@ -90,8 +93,35 @@ class YandexFleetProvider(FleetProvider):
         start = now - timedelta(days=max(1, self.settings.YANDEX_ORDERS_LOOKBACK_DAYS))
         return date_from or start.isoformat(), date_to or now.isoformat()
 
+    async def _driver_profiles_snapshot(self) -> list[dict[str, Any]]:
+        return await self._translate(
+            self.cache.get_or_refresh(
+                "drivers:park:default",
+                ttl_seconds=self.settings.YANDEX_DRIVER_CACHE_TTL_SECONDS,
+                stale_seconds=self.settings.YANDEX_CACHE_STALE_SECONDS,
+                refresh=self.client.list_driver_profiles,
+            )
+        )
+
+    async def _park_orders_snapshot(self) -> list[dict[str, Any]]:
+        async def refresh() -> list[dict[str, Any]]:
+            booked_from, booked_to = self._date_range()
+            return await self.client.list_orders(
+                booked_from=booked_from,
+                booked_to=booked_to,
+            )
+
+        return await self._translate(
+            self.cache.get_or_refresh(
+                "orders:park:default",
+                ttl_seconds=self.settings.YANDEX_ORDERS_CACHE_TTL_SECONDS,
+                stale_seconds=self.settings.YANDEX_CACHE_STALE_SECONDS,
+                refresh=refresh,
+            )
+        )
+
     async def list_drivers(self) -> list[dict[str, Any]]:
-        profiles = await self._translate(self.client.list_driver_profiles())
+        profiles = await self._driver_profiles_snapshot()
         result = [
             map_yandex_driver(
                 profile,
@@ -102,17 +132,7 @@ class YandexFleetProvider(FleetProvider):
         return [driver for driver in result if driver.get("id")]
 
     async def get_driver(self, driver_id: str) -> dict[str, Any] | None:
-        profiles = await self._translate(
-            self.client.list_driver_profiles(
-                driver_profile_ids=[driver_id],
-                max_records=1,
-            )
-        )
-        for profile in profiles:
-            driver = map_yandex_driver(
-                profile,
-                default_country_code=self.settings.PHONE_DEFAULT_COUNTRY_CODE,
-            )
+        for driver in await self.list_drivers():
             if str(driver.get("id")) == str(driver_id):
                 return driver
         return None
@@ -162,16 +182,19 @@ class YandexFleetProvider(FleetProvider):
         date_from: str | None = None,
         date_to: str | None = None,
     ) -> list[dict[str, Any]]:
-        booked_from, booked_to = self._date_range(date_from, date_to)
-        statuses = INTERNAL_TO_YANDEX_STATUSES.get(status) if status else None
-        raw_orders = await self._translate(
-            self.client.list_orders(
-                booked_from=booked_from,
-                booked_to=booked_to,
-                driver_profile_id=driver_id,
-                statuses=statuses,
+        if status is None and date_from is None and date_to is None:
+            raw_orders = await self._park_orders_snapshot()
+        else:
+            booked_from, booked_to = self._date_range(date_from, date_to)
+            statuses = INTERNAL_TO_YANDEX_STATUSES.get(status) if status else None
+            raw_orders = await self._translate(
+                self.client.list_orders(
+                    booked_from=booked_from,
+                    booked_to=booked_to,
+                    driver_profile_id=driver_id,
+                    statuses=statuses,
+                )
             )
-        )
         orders = [map_yandex_order(raw) for raw in raw_orders]
         if driver_id:
             orders = [

@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     YANDEX_HTTP_CONNECT_TIMEOUT_SECONDS: float = 5.0
     YANDEX_HTTP_READ_TIMEOUT_SECONDS: float = 15.0
     YANDEX_RETRY_ATTEMPTS: int = 3
+    YANDEX_CACHE_DB_PATH: str = ".data/yandex_cache.sqlite3"
+    YANDEX_DRIVER_CACHE_TTL_SECONDS: float = Field(default=60, ge=0)
+    YANDEX_ORDERS_CACHE_TTL_SECONDS: float = Field(default=10, ge=0)
+    YANDEX_CACHE_STALE_SECONDS: float = Field(default=60, ge=0)
     PHONE_DEFAULT_COUNTRY_CODE: str = "996"
 
     TELEGRAM_BOT_TOKEN: str | None = None

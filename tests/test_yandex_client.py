@@ -199,6 +199,101 @@ async def test_client_retries_rate_limit_then_fails():
 
 
 @pytest.mark.asyncio
+async def test_client_honors_retry_after_seconds_with_jitter():
+    calls = 0
+    sleeps: list[float] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return httpx.Response(
+                429,
+                json={"message": "Slow down"},
+                headers={"Retry-After": "2"},
+                request=request,
+            )
+        return response(request, 200, {"driver_profiles": [], "total": 0})
+
+    async def capture_sleep(delay: float) -> None:
+        sleeps.append(delay)
+
+    http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    client = YandexFleetClient(
+        http,
+        settings=make_settings(),
+        sleep=capture_sleep,
+        jitter=lambda _start, _end: 0.2,
+    )
+
+    assert await client.list_driver_profiles() == []
+    assert sleeps == [2.2]
+    await http.aclose()
+
+
+@pytest.mark.asyncio
+async def test_client_honors_retry_after_http_date_with_jitter():
+    calls = 0
+    sleeps: list[float] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return httpx.Response(
+                429,
+                json={"message": "Slow down"},
+                headers={"Retry-After": "Thu, 01 Jan 1970 00:16:42 GMT"},
+                request=request,
+            )
+        return response(request, 200, {"driver_profiles": [], "total": 0})
+
+    async def capture_sleep(delay: float) -> None:
+        sleeps.append(delay)
+
+    http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    client = YandexFleetClient(
+        http,
+        settings=make_settings(),
+        sleep=capture_sleep,
+        jitter=lambda _start, _end: 0.25,
+        wall_clock=lambda: 1000.0,
+    )
+
+    assert await client.list_driver_profiles() == []
+    assert sleeps == [2.25]
+    await http.aclose()
+
+
+@pytest.mark.asyncio
+async def test_client_uses_exponential_fallback_without_retry_after():
+    calls = 0
+    sleeps: list[float] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return response(request, 429, {"message": "Slow down"})
+        return response(request, 200, {"driver_profiles": [], "total": 0})
+
+    async def capture_sleep(delay: float) -> None:
+        sleeps.append(delay)
+
+    http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    client = YandexFleetClient(
+        http,
+        settings=make_settings(),
+        sleep=capture_sleep,
+        jitter=lambda _start, _end: 0.3,
+    )
+
+    assert await client.list_driver_profiles() == []
+    assert sleeps == [1.3]
+    await http.aclose()
+
+
+@pytest.mark.asyncio
 async def test_client_retries_server_error_and_handles_invalid_json():
     calls = 0
 
