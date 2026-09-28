@@ -27,7 +27,12 @@ class AppState extends ChangeNotifier {
   OverlaySettings settings = OverlaySettings();
   final List<StreamSubscription<dynamic>> _subscriptions = [];
   void Function(String)? openOrder;
-  AppState(this.api, this.firebaseReady);
+  Future<void>? _refreshTask;
+  AppState(this.api, this.firebaseReady) {
+    api.addListener(_onReachabilityChanged);
+  }
+
+  void _onReachabilityChanged() => notifyListeners();
   bool get signedIn => api.token != null;
   Future<void> init() async {
     api.onUnauthorized = () {
@@ -81,12 +86,16 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  Future<void> refresh() async {
+  Future<void> refresh() {
+    // Pull-to-refresh, lifecycle and connectivity events share one refresh.
+    return _refreshTask ??= _refresh().whenComplete(() => _refreshTask = null);
+  }
+
+  Future<void> _refresh() async {
     if (!signedIn) {
       return;
     }
     try {
-      api.offline = false;
       final values = await Future.wait(
         ['/me', '/summary', '/vehicle', '/orders', '/settings'].map(api.get),
       );
@@ -138,7 +147,7 @@ class AppState extends ChangeNotifier {
           (_) => Random.secure().nextInt(256).toRadixString(16).padLeft(2, '0'),
         ).join();
         await api.storage.write(key: 'device_id', value: id);
-        await api.dio.post(
+        await api.post(
           '/devices',
           data: {
             'fcm_token': token,
@@ -191,7 +200,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> saveSettings(OverlaySettings next) async {
-    await api.dio.put('/settings', data: next.data);
+    await api.put('/settings', data: next.data);
     settings = next;
     if (Platform.isAndroid) {
       await overlayChannel.invokeMethod('setSettings', settings.data);
@@ -210,7 +219,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> logout({bool remote = true}) async {
     if (remote && signedIn) {
-      await api.dio.post('/auth/logout');
+      await api.post('/auth/logout');
     }
     if (Platform.isAndroid) {
       await overlayChannel.invokeMethod('setDriverMode', false);
@@ -230,6 +239,7 @@ class AppState extends ChangeNotifier {
 
   @override
   void dispose() {
+    api.removeListener(_onReachabilityChanged);
     for (final s in _subscriptions) {
       s.cancel();
     }
