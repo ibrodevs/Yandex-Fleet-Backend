@@ -90,6 +90,26 @@ void main() {
       expect(login.error, isNull);
     },
   );
+  test('test auth skips Firebase and sends phone with entered code', () async {
+    final credentials = <(String, String)>[];
+    final testLogin = PhoneLoginController(
+      gateway: gateway,
+      exchangeToken: (_) async {},
+      testAuthEnabled: true,
+      testLogin: (phone, code) async => credentials.add((phone, code)),
+    );
+    addTearDown(testLogin.dispose);
+
+    await testLogin.request(number);
+    expect(testLogin.codeRequested, isTrue);
+    expect(testLogin.busy, isFalse);
+    expect(gateway.phones, isEmpty);
+
+    await testLogin.submitCode('123456');
+    expect(credentials, [(number, '123456')]);
+    expect(gateway.signIns, 0);
+    expect(testLogin.error, isNull);
+  });
   test('manual and automatic verification cannot sign in twice', () async {
     await readyForCode();
     final token = Completer<String>();

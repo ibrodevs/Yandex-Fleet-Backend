@@ -1,4 +1,5 @@
 import logging
+import secrets
 import time
 from typing import Literal
 from uuid import uuid4
@@ -68,6 +69,43 @@ class Login(BaseModel):
     id_token: str = Field(min_length=10, max_length=16384)
 
 
+class TestLogin(BaseModel):
+    phone: str = Field(min_length=7, max_length=32)
+    code: str = Field(min_length=6, max_length=6)
+
+
+async def create_mobile_session(driver: dict, phone: str):
+    cfg = get_settings()
+    sid = str(uuid4())
+    now = int(time.time())
+    expires = now + cfg.MOBILE_JWT_EXPIRE_DAYS * 86400
+
+    async with database() as db:
+        await db.execute(
+            """
+            INSERT INTO mobile_sessions(id,driver_id,phone,expires_at)
+            VALUES(?,?,?,?)
+            """,
+            (sid, str(driver["id"]), phone, expires),
+        )
+
+    token = jwt.encode(
+        {
+            "driver_id": str(driver["id"]),
+            "phone": phone,
+            "session_id": sid,
+            "iat": now,
+            "exp": expires,
+            "aud": "fleet-mobile",
+            "iss": "fleet-backend",
+        },
+        cfg.SECRET_KEY,
+        algorithm="HS256",
+    )
+
+    return {"access_token": token, "token_type": "bearer", "expires_at": expires}
+
+
 @router.post("/auth/firebase")
 async def login(body: Login):
     total_started = time.monotonic()
@@ -104,31 +142,63 @@ async def login(body: Login):
     if not driver or not driver.get("id"):
         log.info("mobile_login_failed")
         raise HTTPException(403, "Водитель с этим номером не найден в парке")
-    sid, now = str(uuid4()), int(time.time())
-    expires = now + cfg.MOBILE_JWT_EXPIRE_DAYS * 86400
-    async with database() as db:
-        await db.execute(
-            "INSERT INTO mobile_sessions(id,driver_id,phone,expires_at) VALUES(?,?,?,?)",
-            (sid, str(driver["id"]), phone, expires),
-        )
-    token = jwt.encode(
-        dict(
-            driver_id=str(driver["id"]),
-            phone=phone,
-            session_id=sid,
-            iat=now,
-            exp=expires,
-            aud="fleet-mobile",
-            iss="fleet-backend",
-        ),
-        cfg.SECRET_KEY,
-        algorithm="HS256",
-    )
+    session_response = await create_mobile_session(driver, phone)
     log.info(
         "mobile_login_success total_duration_ms=%s",
         round((time.monotonic() - total_started) * 1000),
     )
-    return {"access_token": token, "token_type": "bearer", "expires_at": expires}
+    return session_response
+
+
+@router.post("/auth/test")
+async def test_login(body: TestLogin):
+    cfg = get_settings()
+    if not cfg.MOBILE_TEST_AUTH_ENABLED:
+        raise HTTPException(404)
+
+    phone = normalize_phone(
+        body.phone,
+        default_country_code=cfg.PHONE_DEFAULT_COUNTRY_CODE,
+    )
+    allowed = {
+        normalized
+        for item in cfg.MOBILE_TEST_AUTH_PHONES.split(",")
+        if item.strip()
+        if (
+            normalized := normalize_phone(
+                item.strip(),
+                default_country_code=cfg.PHONE_DEFAULT_COUNTRY_CODE,
+            )
+        )
+    }
+
+    if (
+        not phone
+        or phone not in allowed
+        or not secrets.compare_digest(
+            body.code.encode(),
+            cfg.MOBILE_TEST_AUTH_CODE.encode(),
+        )
+    ):
+        log.info("mobile_test_login_failed")
+        raise HTTPException(401, "Неверный номер или тестовый код")
+
+    log.info("mobile_test_login_started")
+    driver_started = time.monotonic()
+    log.info("mobile_test_login_driver_lookup_started")
+    try:
+        driver = await fleet_call("get_driver_by_phone", phone)
+    finally:
+        log.info(
+            "mobile_test_login_driver_lookup_finished duration_ms=%s",
+            round((time.monotonic() - driver_started) * 1000),
+        )
+    if not driver or not driver.get("id"):
+        log.info("mobile_test_login_driver_not_found")
+        raise HTTPException(403, "Водитель с этим номером не найден в парке")
+
+    log.info("mobile_test_login_success")
+    return await create_mobile_session(driver, phone)
 
 
 @router.post("/auth/logout")

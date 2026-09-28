@@ -25,6 +25,7 @@ async def client(tmp_path, monkeypatch):
     monkeypatch.setattr(cfg, "SECRET_KEY", "mobile-test-secret-" * 3)
     monkeypatch.setattr(cfg, "FIREBASE_PROJECT_ID", "test")
     monkeypatch.setattr(cfg, "FIREBASE_CREDENTIALS_FILE", "unused")
+    monkeypatch.setattr(cfg, "MOBILE_TEST_AUTH_ENABLED", False)
     monkeypatch.setattr(cfg, "APP_ENV", "development")
     provider = AsyncMock()
     provider.get_driver_by_phone.return_value = {"id": "a"}
@@ -74,6 +75,60 @@ async def test_mobile_auth(client, monkeypatch):
     assert (
         await c.post("/api/v1/mobile/auth/firebase", json={"id_token": "invalid-token"})
     ).status_code == 401
+
+
+async def test_test_login_is_hidden_when_disabled(client):
+    c, provider = client
+    result = await c.post(
+        "/api/v1/mobile/auth/test",
+        json={"phone": "+79022558511", "code": "123456"},
+    )
+    assert result.status_code == 404
+    provider.get_driver_by_phone.assert_not_awaited()
+
+
+async def test_test_login_requires_allowlisted_phone_and_code(client, monkeypatch):
+    c, provider = client
+    cfg = get_settings()
+    monkeypatch.setattr(cfg, "MOBILE_TEST_AUTH_ENABLED", True)
+    monkeypatch.setattr(cfg, "MOBILE_TEST_AUTH_CODE", "123456")
+    monkeypatch.setattr(cfg, "MOBILE_TEST_AUTH_PHONES", "+79022558511,+79222112992")
+
+    for payload in [
+        {"phone": "+79022558512", "code": "123456"},
+        {"phone": "+79022558511", "code": "000000"},
+    ]:
+        result = await c.post("/api/v1/mobile/auth/test", json=payload)
+        assert result.status_code == 401
+    provider.get_driver_by_phone.assert_not_awaited()
+
+
+async def test_test_login_creates_normal_mobile_session(client, monkeypatch):
+    c, provider = client
+    cfg = get_settings()
+    monkeypatch.setattr(cfg, "MOBILE_TEST_AUTH_ENABLED", True)
+    monkeypatch.setattr(cfg, "MOBILE_TEST_AUTH_CODE", "123456")
+    monkeypatch.setattr(cfg, "MOBILE_TEST_AUTH_PHONES", "+79022558511,+79222112992")
+
+    result = await c.post(
+        "/api/v1/mobile/auth/test",
+        json={"phone": "+7 (902) 255-85-11", "code": "123456"},
+    )
+    assert result.status_code == 200
+    access_token = result.json()["access_token"]
+    claims = jwt.decode(
+        access_token,
+        get_settings().SECRET_KEY,
+        algorithms=["HS256"],
+        audience="fleet-mobile",
+        issuer="fleet-backend",
+    )
+    assert claims["driver_id"] == "a"
+    assert claims["phone"] == "+79022558511"
+    provider.get_driver_by_phone.assert_awaited_once_with("+79022558511")
+
+    c.headers["Authorization"] = "Bearer " + access_token
+    assert (await c.get("/api/v1/mobile/me")).json()["id"] == "a"
 
 
 async def test_driver_cannot_read_foreign_order(client):

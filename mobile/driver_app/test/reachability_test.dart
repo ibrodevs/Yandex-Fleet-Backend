@@ -215,6 +215,17 @@ void main() {
     },
   );
 
+  test('test login posts phone and code then persists backend JWT', () async {
+    final login = api.testLogin('+79022558511', '123456');
+    await requests.waitFor(1);
+    expect(requests.paths, ['/auth/test']);
+    requests.success('/auth/test', {'access_token': 'mobile-jwt'});
+    await login;
+
+    expect(api.token, 'mobile-jwt');
+    expect(await api.storage.read(key: 'jwt'), 'mobile-jwt');
+  });
+
   test(
     'devices response survives late failures from overlapping refresh',
     () async {

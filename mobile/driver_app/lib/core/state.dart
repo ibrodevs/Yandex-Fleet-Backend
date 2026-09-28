@@ -79,6 +79,20 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  Future<void> loginWithTestCredentials(String phone, String code) async {
+    busy = true;
+    error = null;
+    notifyListeners();
+    try {
+      await api.testLogin(phone, code);
+      await refresh();
+      await registerPush();
+    } finally {
+      busy = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> refresh() {
     // Pull-to-refresh, lifecycle and connectivity events share one refresh.
     return _refreshTask ??= _refresh().whenComplete(() => _refreshTask = null);

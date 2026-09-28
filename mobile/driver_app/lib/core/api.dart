@@ -38,7 +38,8 @@ class FleetApi extends ChangeNotifier {
         },
         onError: (error, handler) {
           if (error.response?.statusCode == 401 &&
-              !error.requestOptions.path.contains('/auth/firebase')) {
+              !error.requestOptions.path.contains('/auth/firebase') &&
+              !error.requestOptions.path.contains('/auth/test')) {
             onUnauthorized?.call();
           }
           handler.next(error);
@@ -119,6 +120,16 @@ class FleetApi extends ChangeNotifier {
 
   Future<void> login(String idToken) async {
     final response = await post('/auth/firebase', data: {'id_token': idToken});
+    final accessToken = response.data['access_token'] as String;
+    await storage.write(key: 'jwt', value: accessToken);
+    token = accessToken;
+  }
+
+  Future<void> testLogin(String phone, String code) async {
+    final response = await post(
+      '/auth/test',
+      data: {'phone': phone, 'code': code},
+    );
     final accessToken = response.data['access_token'] as String;
     await storage.write(key: 'jwt', value: accessToken);
     token = accessToken;

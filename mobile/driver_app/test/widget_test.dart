@@ -92,7 +92,7 @@ void main() {
       );
     },
   );
-  testWidgets('login displays Firebase setup state without demo access', (
+  testWidgets('login respects the configured authentication mode', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -101,9 +101,13 @@ void main() {
     expect(find.text('fleet hub'), findsOneWidget);
     await tester.drag(find.byType(ListView), const Offset(0, -500));
     await tester.pumpAndSettle();
+    final submit = tester.widget<FilledButton>(find.byType(FilledButton));
+    expect(submit.onPressed, testAuthEnabled ? isNotNull : isNull);
     expect(
-      tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
-      isNull,
+      find.text(
+        'Вход станет доступен после подключения Firebase владельцем парка.',
+      ),
+      testAuthEnabled ? findsNothing : findsOneWidget,
     );
   });
   testWidgets('order card has no unsupported actions', (tester) async {

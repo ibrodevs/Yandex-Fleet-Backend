@@ -9,6 +9,10 @@ import 'core/phone_login.dart';
 import 'core/state.dart';
 
 const lime = Color(0xFFD8F36A);
+const testAuthEnabled = bool.fromEnvironment(
+  'TEST_AUTH_ENABLED',
+  defaultValue: false,
+);
 
 class FleetApp extends StatefulWidget {
   final AppState state;
@@ -114,7 +118,7 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final phone = TextEditingController(), code = TextEditingController();
   late final PhoneLoginController login;
-  String? get verification => login.verificationId;
+  bool get codeRequested => login.codeRequested;
   String? get error => login.error;
   bool get sending => login.busy;
 
@@ -124,6 +128,8 @@ class _LoginScreenState extends State<LoginScreen> {
     login = PhoneLoginController(
       gateway: FirebasePhoneAuthGateway(),
       exchangeToken: widget.state.loginWithFirebaseToken,
+      testAuthEnabled: testAuthEnabled,
+      testLogin: widget.state.loginWithTestCredentials,
     )..addListener(_changed);
   }
 
@@ -140,7 +146,7 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  Future<void> submit() => verification != null || login.numberVerified
+  Future<void> submit() => codeRequested || login.numberVerified
       ? login.submitCode(code.text)
       : login.request(phone.text);
 
@@ -191,7 +197,11 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 38),
               Text(
-                verification == null ? 'Вход по номеру телефона' : 'Код из SMS',
+                codeRequested
+                    ? testAuthEnabled
+                          ? 'Тестовый код'
+                          : 'Код из SMS'
+                    : 'Вход по номеру телефона',
                 style: const TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
@@ -199,23 +209,23 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 16),
               TextField(
-                key: ValueKey(verification == null ? 'phone' : 'sms-code'),
+                key: ValueKey(codeRequested ? 'sms-code' : 'phone'),
                 enabled: !sending && !login.numberVerified,
-                controller: verification == null ? phone : code,
-                keyboardType: verification == null
-                    ? TextInputType.phone
-                    : TextInputType.number,
-                autofillHints: verification == null
-                    ? const [AutofillHints.telephoneNumber]
-                    : const [AutofillHints.oneTimeCode],
+                controller: codeRequested ? code : phone,
+                keyboardType: codeRequested
+                    ? TextInputType.number
+                    : TextInputType.phone,
+                autofillHints: codeRequested
+                    ? const [AutofillHints.oneTimeCode]
+                    : const [AutofillHints.telephoneNumber],
                 decoration: InputDecoration(
-                  hintText: verification == null
-                      ? '+996 ___ ___ ___'
-                      : 'Введите код',
+                  hintText: codeRequested
+                      ? testAuthEnabled
+                            ? 'Введите тестовый код'
+                            : 'Введите код'
+                      : '+996 ___ ___ ___',
                   prefixIcon: Icon(
-                    verification == null
-                        ? Icons.phone_outlined
-                        : Icons.lock_outline,
+                    codeRequested ? Icons.lock_outline : Icons.phone_outlined,
                   ),
                 ),
               ),
@@ -225,7 +235,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   error!,
                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
-              if (!widget.state.firebaseReady)
+              if (!testAuthEnabled && !widget.state.firebaseReady)
                 const Padding(
                   padding: EdgeInsets.only(bottom: 16),
                   child: Text(
@@ -233,7 +243,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
               FilledButton(
-                onPressed: sending || !widget.state.firebaseReady
+                onPressed:
+                    sending || (!testAuthEnabled && !widget.state.firebaseReady)
                     ? null
                     : submit,
                 child: Text(
@@ -241,12 +252,12 @@ class _LoginScreenState extends State<LoginScreen> {
                       ? 'Подождите…'
                       : login.numberVerified
                       ? 'Повторить вход'
-                      : verification == null
+                      : !codeRequested
                       ? 'Получить код'
                       : 'Войти',
                 ),
               ),
-              if (verification != null)
+              if (codeRequested)
                 TextButton(
                   onPressed: sending
                       ? null
@@ -256,7 +267,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         },
                   child: const Text('Изменить номер'),
                 ),
-              if (verification != null && !login.numberVerified)
+              if (codeRequested && !testAuthEnabled && !login.numberVerified)
                 TextButton(
                   onPressed: sending
                       ? null
@@ -268,7 +279,9 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               const SizedBox(height: 22),
               const Text(
-                'Используйте номер вашего таксопарка. Номер передаётся Firebase для подтверждения и защиты от спама.',
+                testAuthEnabled
+                    ? 'Используйте разрешённый тестовый номер и код.'
+                    : 'Используйте номер вашего таксопарка. Номер передаётся Firebase для подтверждения и защиты от спама.',
                 style: TextStyle(fontSize: 12, height: 1.5),
               ),
             ],

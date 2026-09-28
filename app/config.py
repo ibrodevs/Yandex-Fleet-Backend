@@ -70,6 +70,9 @@ class Settings(BaseSettings):
     MOBILE_JWT_EXPIRE_DAYS: int = Field(default=30, ge=1, le=90)
     MOBILE_ORDER_WATCHER_ENABLED: bool = True
     MOBILE_ORDER_POLL_INTERVAL_SECONDS: int = Field(default=10, ge=5)
+    MOBILE_TEST_AUTH_ENABLED: bool = False
+    MOBILE_TEST_AUTH_CODE: str = "123456"
+    MOBILE_TEST_AUTH_PHONES: str = ""
     FIREBASE_PROJECT_ID: str = ""
     FIREBASE_CREDENTIALS_FILE: str = ""
 

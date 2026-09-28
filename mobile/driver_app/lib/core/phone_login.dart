@@ -83,10 +83,18 @@ String phoneAuthError(Object error, {required bool backend}) {
 class PhoneLoginController extends ChangeNotifier {
   final PhoneAuthGateway gateway;
   final Future<void> Function(String) exchangeToken;
-  PhoneLoginController({required this.gateway, required this.exchangeToken});
+  final bool testAuthEnabled;
+  final Future<void> Function(String, String)? testLogin;
+  PhoneLoginController({
+    required this.gateway,
+    required this.exchangeToken,
+    this.testAuthEnabled = false,
+    this.testLogin,
+  });
 
   String? verificationId, error;
   String? _phone, _idToken;
+  bool _testCodeRequested = false;
   int? _resendToken;
   int _generation = 0;
   bool busy = false,
@@ -95,6 +103,8 @@ class PhoneLoginController extends ChangeNotifier {
       _finished = false;
   Timer? _requestTimer;
   bool get numberVerified => _idToken != null;
+  bool get codeRequested =>
+      testAuthEnabled ? _testCodeRequested : verificationId != null;
   bool _current(int generation) =>
       !_disposed && generation == _generation && !_finished;
   void _changed() {
@@ -114,7 +124,15 @@ class PhoneLoginController extends ChangeNotifier {
     _phone = number;
     _idToken = null;
     verificationId = null;
+    _testCodeRequested = false;
     error = null;
+    if (testAuthEnabled) {
+      _testCodeRequested = true;
+      busy = false;
+      _finished = false;
+      _changed();
+      return;
+    }
     busy = true;
     _finished = false;
     _changed();
@@ -175,6 +193,16 @@ class PhoneLoginController extends ChangeNotifier {
 
   Future<void> submitCode(String code) async {
     if (busy || _finished) return;
+    if (testAuthEnabled) {
+      final trimmedCode = code.trim();
+      if (!RegExp(r'^\d{6}$').hasMatch(trimmedCode)) {
+        error = 'Введите шестизначный код.';
+        _changed();
+        return;
+      }
+      await _authenticateTest(trimmedCode, _generation);
+      return;
+    }
     if (_idToken != null) {
       await _authenticate(null, _generation);
       return;
@@ -190,6 +218,40 @@ class PhoneLoginController extends ChangeNotifier {
       PhoneAuthProvider.credential(verificationId: id, smsCode: code.trim()),
       _generation,
     );
+  }
+
+  Future<void> _authenticateTest(String code, int generation) async {
+    if (!_current(generation) || _authenticating) return;
+    _authenticating = true;
+    busy = true;
+    error = null;
+    _changed();
+    try {
+      await testLogin!(_phone!, code);
+      if (_current(generation)) _finished = true;
+    } catch (failure) {
+      if (_current(generation)) {
+        if (failure is DioException) {
+          final status = failure.response?.statusCode;
+          error = switch (status) {
+            401 => 'Неверный номер или тестовый код.',
+            403 => 'Водитель с этим номером не найден в парке.',
+            404 => 'Тестовый вход отключён на backend.',
+            503 => 'Backend или Яндекс временно недоступен.',
+            null => 'Нет связи с backend. Проверьте интернет и повторите вход.',
+            _ => 'Ошибка backend: HTTP $status.',
+          };
+        } else {
+          error = 'Не удалось выполнить тестовый вход.';
+        }
+      }
+    } finally {
+      _authenticating = false;
+      if (!_disposed && generation == _generation) {
+        busy = false;
+        _changed();
+      }
+    }
   }
 
   Future<void> _authenticate(
@@ -240,6 +302,7 @@ class PhoneLoginController extends ChangeNotifier {
     verificationId = null;
     _idToken = null;
     _phone = null;
+    _testCodeRequested = false;
     _resendToken = null;
     busy = false;
     error = null;
