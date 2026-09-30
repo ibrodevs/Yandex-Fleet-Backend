@@ -7,6 +7,7 @@ import 'core/api.dart';
 import 'core/models.dart';
 import 'core/phone_login.dart';
 import 'core/state.dart';
+import 'yandex/yandex_diagnostics_screen.dart';
 
 const lime = Color(0xFFD8F36A);
 const testAuthEnabled = bool.fromEnvironment(
@@ -577,6 +578,19 @@ class _DashboardState extends State<Dashboard> with WidgetsBindingObserver {
   List<Widget> preferences() => [
     title('Настройки'),
     if (Platform.isAndroid) ...[
+      Card(
+        child: ListTile(
+          leading: const Icon(Icons.integration_instructions_outlined),
+          title: const Text('Интеграция с Yandex Pro'),
+          subtitle: const Text('Разрешения и диагностика'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => const YandexDiagnosticsScreen(),
+            ),
+          ),
+        ),
+      ),
       Card(
         child: SwitchListTile(
           title: const Text('Режим водителя'),

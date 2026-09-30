@@ -13,6 +13,7 @@ class MainActivity: FlutterActivity() {
     private var channel: MethodChannel? = null
     override fun configureFlutterEngine(engine: FlutterEngine) {
         super.configureFlutterEngine(engine)
+        engine.plugins.add(kg.fleethub.driver_app.yandex.YandexBridgePlugin())
         channel = MethodChannel(engine.dartExecutor.binaryMessenger, "fleet/overlay")
         channel!!.setMethodCallHandler { call, result ->
             try {

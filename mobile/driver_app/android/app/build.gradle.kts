@@ -14,6 +14,7 @@ val signingFile = rootProject.file("key.properties")
 if (signingFile.exists()) { signingProperties.load(FileInputStream(signingFile)) }
 
 android {
+    buildFeatures { buildConfig = true }
     namespace = "kg.fleethub.driver_app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
@@ -25,6 +26,7 @@ android {
     }
 
     defaultConfig {
+        buildConfigField("boolean", "YANDEX_BRIDGE_DEBUG", providers.gradleProperty("YANDEX_BRIDGE_DEBUG").orElse("true").get().toBoolean().toString())
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "kg.fleethub.driver_app"
