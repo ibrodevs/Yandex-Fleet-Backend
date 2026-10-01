@@ -93,7 +93,7 @@ object OrderDelivery {
         }
         val seen = prefs.store.getStringSet("seen", emptySet()).orEmpty().toMutableSet()
         if (source != "yandex_notification" && deliveryId in seen) {
-            MonitorLog.write(context, "DEBUG", "DEDUP", "duplicate-${if (source == "yandex_notification") "local" else "fcm"}-ignored source=$source reason=seen", eventId, orderId)
+            MonitorLog.write(context, "DEBUG", "DEDUP", "duplicate-$source-ignored source=$source reason=seen", eventId, orderId)
             return
         }
         var reserved = false
@@ -118,17 +118,17 @@ object OrderDelivery {
         if (prefs.driverMode && overlayEnabled && permission && !serviceAvailable) {
             try {
                 context.startForegroundService(Intent(context, OrderOverlayService::class.java))
-                serviceAvailable = true // The service starts asynchronously; WindowManager can show now.
                 MonitorLog.write(context, "INFO", "OVERLAY", "Overlay service start requested source=$source", eventId, orderId)
             } catch (e: Exception) {
                 MonitorLog.write(context, "ERROR", "OVERLAY", "Service start failed: ${e.javaClass.simpleName} source=$source", eventId, orderId)
             }
         }
+        serviceAvailable = OrderOverlayService.instance != null
         MonitorLog.write(context, "DEBUG", "OVERLAY",
-            "driverMode=${prefs.driverMode} active=${prefs.active} overlay_enabled=$overlayEnabled overlay_permission=$permission service_available=$serviceAvailable source=$source",
+            "driverMode=${prefs.driverMode} active=${prefs.active} overlay_enabled=$overlayEnabled overlay_permission=$permission service_running=$serviceAvailable source=$source",
             eventId, orderId)
         var shown = false
-        if (prefs.driverMode && overlayEnabled && permission && serviceAvailable) {
+        if (prefs.driverMode && overlayEnabled && permission) {
             try {
                 MonitorLog.write(context, "INFO", "OVERLAY", "Overlay show requested source=$source", eventId, orderId)
                 OverlayManager.get(context).show(order)
