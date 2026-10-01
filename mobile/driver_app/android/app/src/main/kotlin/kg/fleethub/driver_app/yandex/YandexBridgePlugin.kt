@@ -31,11 +31,16 @@ class YandexBridgePlugin : FlutterPlugin {
                     "openNotificationAccessSettings" -> {
                         open(context, Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS), Intent(Settings.ACTION_SETTINGS)); result.success(null)
                     }
+                    "openAppNotificationSettings" -> {
+                        open(context, Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                            .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName), Intent(Settings.ACTION_SETTINGS)); result.success(null)
+                    }
                     "setMonitorDebug" -> {
                         context.getSharedPreferences("yandex_monitor", Context.MODE_PRIVATE).edit().putBoolean("debug", call.arguments == true).apply()
                         result.success(null)
                     }
                     "getMonitorLog" -> result.success(MonitorLog.read(context))
+                    "recordMonitorError" -> { MonitorLog.write(context, "ERROR", "FLUTTER", "EventChannel error type=${call.arguments?.toString()?.take(80)}"); result.success(null) }
                     "clearMonitorLog" -> { MonitorLog.clear(context); result.success(null) }
                     "shareMonitorLog" -> {
                         val share = Intent(Intent.ACTION_SEND).setType("text/plain")
@@ -62,7 +67,7 @@ class YandexBridgePlugin : FlutterPlugin {
                     "clearDebugLog" -> { YandexDiagnostics.clear(); result.success(null) }
                     else -> result.notImplemented()
                 }
-            } catch (e: Exception) { result.error("yandex_diagnostics", "Не удалось выполнить действие: ${e.javaClass.simpleName}", null) }
+            } catch (e: Exception) { MonitorLog.write(context, "ERROR", "FLUTTER", "Yandex channel failed: ${e.javaClass.simpleName}"); result.error("yandex_diagnostics", "Не удалось выполнить действие: ${e.javaClass.simpleName}", null) }
         }
     }
     private fun open(context: Context, intent: Intent, fallback: Intent) {

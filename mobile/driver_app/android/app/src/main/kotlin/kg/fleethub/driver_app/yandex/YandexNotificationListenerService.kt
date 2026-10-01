@@ -3,11 +3,13 @@ package kg.fleethub.driver_app.yandex
 import android.app.Notification
 import android.content.ComponentName
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import kg.fleethub.driver_app.R
-import kg.fleethub.driver_app.overlay.IncomingOrderPresenter
+import kg.fleethub.driver_app.overlay.OrderDelivery
 import kg.fleethub.driver_app.overlay.OverlayPreferences
 import org.json.JSONObject
 
@@ -25,13 +27,13 @@ class YandexNotificationListenerService : NotificationListenerService() {
     override fun onListenerConnected() {
         connected = true
         MonitorLog.write(this, "INFO", "PERMISSION", "Notification listener connected")
-        YandexDiagnostics.listener?.invoke(mapOf("event" to "monitor_status_changed"))
+        Handler(Looper.getMainLooper()).post { runCatching { YandexDiagnostics.listener?.invoke(mapOf("event" to "monitor_status_changed")) } }
     }
 
     override fun onListenerDisconnected() {
         connected = false
         MonitorLog.write(this, "WARN", "PERMISSION", "Notification listener disconnected")
-        YandexDiagnostics.listener?.invoke(mapOf("event" to "monitor_status_changed"))
+        Handler(Looper.getMainLooper()).post { runCatching { YandexDiagnostics.listener?.invoke(mapOf("event" to "monitor_status_changed")) } }
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {
@@ -57,20 +59,30 @@ class YandexNotificationListenerService : NotificationListenerService() {
             val id = IncomingOrderDeduplicator.eventId(payload)
             val debug = getSharedPreferences("yandex_monitor", Context.MODE_PRIVATE).getBoolean("debug", false)
             MonitorLog.write(this, "INFO", "YANDEX_NOTIFICATION", "Notification received package=${sbn.packageName} key_hash=${sbn.key.hashCode()} category=${n.category} timestamp=${sbn.postTime}", id)
-            if (debug) MonitorLog.write(this, "DEBUG", "YANDEX_NOTIFICATION", "title=${payload.title} text=${payload.text} big_text=${payload.bigText} sub_text=${payload.subText} extras_keys=${extras.keySet().joinToString()}", id)
+            if (debug) MonitorLog.write(this, "DEBUG", "YANDEX_NOTIFICATION",
+                "title=${payload.title.take(300)} text=${payload.text.take(300)} big_text=${payload.bigText.take(300)} sub_text=${payload.subText.take(300)} extras_keys=${extras.keySet().joinToString().take(300)}", id)
             val result = YandexOrderDetector.detect(payload)
-            MonitorLog.write(this, "INFO", "ORDER_DETECTOR", "is_order=${result.isOrder} confidence=${result.confidence}", id)
-            if (!result.isOrder) return
-            val prefs = OverlayPreferences(this)
-            if (prefs.store.getString("driver_id", null).isNullOrBlank() || !prefs.active || !prefs.settings.optBoolean("notifications", true)) {
-                MonitorLog.write(this, "WARN", "DEDUP", "Order ignored: no active linked driver or notifications disabled", id)
+            MonitorLog.write(this, "INFO", "ORDER_DETECTOR", "is_order=${result.isOrder} confidence=${result.confidence} source=yandex_notification", id)
+            if (!result.isOrder) {
+                if (result.confidence == "medium") MonitorLog.write(this, "DEBUG", "ORDER_DETECTOR", "Potential order detected but not shown", id)
                 return
             }
-            val order = JSONObject().put("type", "incoming_order").put("source", "yandex_notification")
+            val prefs = OverlayPreferences(this)
+            val driverId = prefs.store.getString("driver_id", null)
+            if (driverId.isNullOrBlank()) {
+                MonitorLog.write(this, "WARN", "ORDER_DETECTOR", "Order detected but driver is not linked", id)
+                return
+            }
+            MonitorLog.write(this, "INFO", "ORDER_DETECTOR", "Order confirmed source=yandex_notification", id)
+            val order = JSONObject().put("type", "new_order").put("event_type", "incoming_order")
+                .put("source", "yandex_notification").put("driver_id", driverId).put("order_id", "")
                 .put("event_id", id).put("price", result.price).put("currency", result.currency)
-                .put("pickup", result.pickup).put("destination", result.destination)
+                .put("pickup", result.pickup).put("destination", result.destination).put("tariff_title", JSONObject.NULL)
                 .put("detected_at", System.currentTimeMillis())
-            IncomingOrderPresenter.show(this, order)
+            Handler(Looper.getMainLooper()).post {
+                try { OrderDelivery.deliver(this, order) }
+                catch (e: Exception) { MonitorLog.write(this, "ERROR", "ORDER_DELIVERY", "Delivery failed: ${e.javaClass.simpleName}", id) }
+            }
         } catch (e: Exception) {
             MonitorLog.write(this, "ERROR", "YANDEX_NOTIFICATION", "Processing failed: ${e.javaClass.simpleName}")
         }

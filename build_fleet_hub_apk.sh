@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-API_BASE_URL="https://yandexfeetbackend21.pythonanywhere.com/api/v1/mobile"
-HEALTH_URL="https://yandexfeetbackend21.pythonanywhere.com/health"
+API_BASE_URL="${API_BASE_URL:-https://yandexfeetbackend21.pythonanywhere.com/api/v1/mobile}"
+API_BASE_URL="${API_BASE_URL%/}"
+if [[ "$API_BASE_URL" != https://*/api/v1/mobile ]]; then
+  echo "ERROR: API_BASE_URL must be an HTTPS URL ending in /api/v1/mobile"
+  exit 1
+fi
+HEALTH_URL="${HEALTH_URL:-${API_BASE_URL%/api/v1/mobile}/health}"
 EXPECTED_PACKAGE="kg.fleethub.driver_app"
 EXPECTED_FIREBASE_PROJECT="yandex-fleet"
 

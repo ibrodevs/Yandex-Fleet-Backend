@@ -16,22 +16,35 @@ class _YandexDiagnosticsScreenState extends State<YandexDiagnosticsScreen>
   static const methods = MethodChannel('fleet/yandex/methods');
   static const events = EventChannel('fleet/yandex/events');
   Map<String, dynamic> status = {};
+  String monitorLog = '';
+  int logRequest = 0;
   StreamSubscription<dynamic>? subscription;
   String? error;
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    subscription = events.receiveBroadcastStream().listen(
-      (_) => refresh(),
-      onError: showError,
-    );
+    subscription = events.receiveBroadcastStream().listen((event) {
+      if (event is Map && event['event'] == 'debug_log') {
+        loadMonitorLog();
+      } else {
+        refresh();
+        loadMonitorLog();
+      }
+    }, onError: (Object e) {
+      showError(e);
+      methods.invokeMethod<void>('recordMonitorError', e.runtimeType.toString()).catchError((_) {});
+    });
     refresh();
+    loadMonitorLog();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) refresh();
+    if (state == AppLifecycleState.resumed) {
+      refresh();
+      loadMonitorLog();
+    }
   }
 
   void showError(Object e) {
@@ -58,18 +71,42 @@ class _YandexDiagnosticsScreenState extends State<YandexDiagnosticsScreen>
     try {
       await methods.invokeMethod<void>(name, args);
       await refresh();
+      await loadMonitorLog();
     } catch (e) {
       showError(e);
     }
   }
 
-  Future<void> copy() async {
+  Future<void> loadMonitorLog() async {
+    final request = ++logRequest;
+    try {
+      final value = await methods.invokeMethod<String>('getMonitorLog');
+      if (mounted && request == logRequest) setState(() => monitorLog = value ?? '');
+    } catch (e) {
+      showError(e);
+    }
+  }
+
+  Future<void> copyMonitorLog() async {
     try {
       final text = await methods.invokeMethod<String>('getMonitorLog');
       await Clipboard.setData(ClipboardData(text: text ?? ''));
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Логи скопированы')));
+            .showSnackBar(const SnackBar(content: Text('Логи мониторинга скопированы')));
+      }
+    } catch (e) {
+      showError(e);
+    }
+  }
+
+  Future<void> copyAccessibilityLog() async {
+    try {
+      final text = await methods.invokeMethod<String>('getDebugLog');
+      await Clipboard.setData(ClipboardData(text: text ?? ''));
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Debug-log скопирован')));
       }
     } catch (e) {
       showError(e);
@@ -83,15 +120,16 @@ class _YandexDiagnosticsScreenState extends State<YandexDiagnosticsScreen>
     super.dispose();
   }
 
-  Widget row(String title, String key, {String? action}) {
+  Widget row(String title, String key, {String? action, bool fallback = false}) {
     final enabled = status[key] == true;
+    final color = enabled ? Colors.green : (fallback ? Colors.amber : Colors.red);
     return Card(
       child: ListTile(
         title: Text(title),
         subtitle: Text(enabled ? 'Включено' : 'Выключено / недоступно'),
         leading: Icon(
           enabled ? Icons.check_circle : Icons.info_outline,
-          color: enabled ? Colors.green : null,
+          color: color,
         ),
         trailing: !enabled && action != null
             ? TextButton(
@@ -113,15 +151,32 @@ class _YandexDiagnosticsScreenState extends State<YandexDiagnosticsScreen>
         const SizedBox(height: 16),
         row('Доступ к уведомлениям', 'notificationAccess', action: 'openNotificationAccessSettings'),
         row('Сервис мониторинга подключён', 'notificationListener'),
+        row('Уведомления Fleet Hub', 'fleetNotifications', action: 'openAppNotificationSettings', fallback: status['overlay'] == true),
         row('Водитель привязан', 'driverLinked'),
+        row('Мониторинг активен', 'monitoringActive'),
+        row('Режим водителя', 'driverMode', fallback: true),
+        row('Поверх других приложений', 'overlay', action: 'openOverlaySettings', fallback: true),
+        row('Сервис виджета', 'overlayService', fallback: true),
+        row('FCM зарегистрирован', 'fcmRegistered', fallback: true),
         OutlinedButton(
           onPressed: () async {
             await refresh();
             if (!mounted) return;
-            final ready = status['notificationAccess'] == true &&
-                status['notificationListener'] == true && status['driverLinked'] == true;
+            final listenerReady = status['notificationAccess'] == true &&
+                status['notificationListener'] == true && status['driverLinked'] == true &&
+                status['monitoringActive'] == true;
+            final overlayReady = status['driverMode'] == true && status['overlay'] == true &&
+                status['overlayService'] == true;
+            final fallbackReady = status['fleetNotifications'] == true;
+            final message = !listenerReady
+                ? 'Мониторинг недоступен: проверьте доступ к уведомлениям, вход водителя и активность мониторинга'
+                : overlayReady
+                    ? 'Мониторинг готов: виджет поверх приложений доступен'
+                    : fallbackReady
+                        ? 'Мониторинг частично готов: виджет недоступен, будет системное уведомление'
+                        : 'Мониторинг недоступен: нет доступа к виджету и уведомлениям Fleet Hub';
             ScaffoldMessenger.of(this.context).showSnackBar(SnackBar(content: Text(
-              ready ? 'Мониторинг готов' : 'Мониторинг недоступен: проверьте доступ к уведомлениям и вход водителя',
+              message,
             )));
           },
           child: const Text('Проверить мониторинг'),
@@ -134,14 +189,11 @@ class _YandexDiagnosticsScreenState extends State<YandexDiagnosticsScreen>
         if (status['monitorDebug'] == true) ...[
           const Text('Логи мониторинга'),
           Wrap(spacing: 8, children: [
-            OutlinedButton(onPressed: copy, child: const Text('Копировать')),
+            OutlinedButton(onPressed: copyMonitorLog, child: const Text('Копировать')),
             TextButton(onPressed: () => invoke('clearMonitorLog'), child: const Text('Очистить')),
             TextButton(onPressed: () => invoke('shareMonitorLog'), child: const Text('Сохранить')),
           ]),
-          FutureBuilder<String?>(
-            future: methods.invokeMethod<String>('getMonitorLog'),
-            builder: (_, snapshot) => SelectableText(snapshot.data ?? 'Загрузка журнала…'),
-          ),
+          SelectableText(monitorLog.isEmpty ? 'Записей пока нет.' : monitorLog),
         ],
         const SizedBox(height: 16),
         Card(
@@ -178,7 +230,7 @@ class _YandexDiagnosticsScreenState extends State<YandexDiagnosticsScreen>
             spacing: 8,
             children: [
               OutlinedButton(
-                onPressed: copy,
+                onPressed: copyAccessibilityLog,
                 child: const Text('Скопировать debug-log'),
               ),
               TextButton(

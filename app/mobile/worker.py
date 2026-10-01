@@ -90,7 +90,7 @@ class MobileOrderWatcher:
                         "duration_minutes",
                     )
                 }
-                payload.update(type="new_order", event_type="incoming_order",
+                payload.update(type="new_order", event_type="incoming_order", source="fleet_api",
                                event_id=f"fleet_{driver_id}_{order_id}",
                                created_at=order.get("created_at"),
                                order_id=order_id, driver_id=driver_id)

@@ -31,9 +31,12 @@ void main() {
         const MaterialApp(home: YandexDiagnosticsScreen()),
       );
       await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(find.text('Не установлен'), 300);
       expect(find.text('Не установлен'), findsOneWidget);
-      expect(find.text('Включить'), findsNWidgets(2));
+      expect(find.text('Включить'), findsWidgets);
       expect(find.text('Записывать дерево Yandex Pro'), findsNothing);
+      await tester.scrollUntilVisible(
+        find.textContaining('Подробная запись доступна только'), 300);
       expect(
         find.textContaining('Подробная запись доступна только'),
         findsOneWidget,
@@ -53,8 +56,41 @@ void main() {
     });
     await tester.pumpWidget(const MaterialApp(home: YandexDiagnosticsScreen()));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Включить').first);
+    await tester.scrollUntilVisible(find.text('Специальные возможности'), 300);
+    final card = find.ancestor(of: find.text('Специальные возможности'), matching: find.byType(Card));
+    await tester.tap(find.descendant(of: card, matching: find.text('Включить')));
     await tester.pumpAndSettle();
     expect(calls, contains('openAccessibilitySettings'));
+  });
+
+  testWidgets('Monitor and Accessibility copy buttons use separate logs', (tester) async {
+    final calls = <String>[];
+    messenger.setMockMethodCallHandler(events, (_) async => null);
+    messenger.setMockMethodCallHandler(methods, (call) async {
+      calls.add(call.method);
+      switch (call.method) {
+        case 'getServiceStatus':
+          return <String, dynamic>{'monitorDebug': true, 'debugAvailable': true};
+        case 'getMonitorLog':
+          return 'monitor log';
+        case 'getDebugLog':
+          return 'accessibility log';
+        default:
+          return null;
+      }
+    });
+    await tester.pumpWidget(const MaterialApp(home: YandexDiagnosticsScreen()));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Копировать'), 300);
+    await tester.tap(find.text('Копировать'));
+    await tester.pumpAndSettle();
+    expect(calls.last, 'getMonitorLog');
+    for (var i = 0; i < 8 && find.text('Скопировать debug-log').evaluate().isEmpty; i++) {
+      await tester.drag(find.byType(ListView), const Offset(0, -300));
+      await tester.pumpAndSettle();
+    }
+    await tester.tap(find.text('Скопировать debug-log').first);
+    await tester.pumpAndSettle();
+    expect(calls.last, 'getDebugLog');
   });
 }

@@ -27,7 +27,7 @@ object MonitorLog {
                 val lines = file.readLines().takeLast(4000)
                 file.writeText(lines.joinToString("\n", postfix = "\n"))
             }
-            Handler(Looper.getMainLooper()).post { YandexDiagnostics.listener?.invoke(mapOf("event" to "debug_log")) }
+            Handler(Looper.getMainLooper()).post { runCatching { YandexDiagnostics.listener?.invoke(mapOf("event" to "debug_log")) } }
         } catch (_: Exception) { /* Logging must never stop order delivery. */ }
     }
 

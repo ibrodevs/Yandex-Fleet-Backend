@@ -37,11 +37,22 @@ class OverlayManager private constructor(private val context: Context) {
         }
         val header=TextView(context).apply { text=if(order.optBoolean("is_test")) "ПРОВЕРКА ЭКРАНА · ПРИМЕР" else "●  ВХОДЯЩИЙ ЗАКАЗ"; textSize=12f;setTextColor(Color.rgb(216,243,106));setPadding(0,0,0,dp(12)) }
         root.addView(header)
-        if(s.optBoolean("show_tariff",true)) label(OrderDelivery.text(order,"tariff_title"),23f)
-        if(s.optBoolean("show_distance",true)) label("${OrderDelivery.text(order,"distance_km")} км · ${OrderDelivery.text(order,"duration_minutes")} мин",14f,Color.LTGRAY)
-        if(s.optBoolean("show_price",true)) label("${OrderDelivery.text(order,"price")} ${if(order.optString("currency")=="RUB") "₽" else OrderDelivery.text(order,"currency")}",26f)
-        label(when(order.optString("payment_method")){"card"->"Безнал";"cash"->"Наличные";else->OrderDelivery.text(order,"payment_method")},14f,Color.LTGRAY)
-        if(s.optBoolean("show_address",true)) { label("А  ${OrderDelivery.text(order,"pickup")}"); label("Б  ${OrderDelivery.text(order,"destination")}") }
+        if(s.optBoolean("show_tariff",true)) OrderDelivery.value(order,"tariff_title")?.let { label(it,23f) }
+        val distance = OrderDelivery.value(order,"distance_km")
+        val duration = OrderDelivery.value(order,"duration_minutes")
+        if(s.optBoolean("show_distance",true) && (distance != null || duration != null))
+            label(listOfNotNull(distance?.let { "$it км" }, duration?.let { "$it мин" }).joinToString(" · "),14f,Color.LTGRAY)
+        if(s.optBoolean("show_price",true)) OrderDelivery.value(order,"price")?.let { price ->
+            val currency = OrderDelivery.value(order,"currency")
+            label(listOfNotNull(price, if(currency=="RUB") "₽" else currency).joinToString(" "),26f)
+        }
+        OrderDelivery.value(order,"payment_method")?.let { payment ->
+            label(when(payment){"card"->"Безнал";"cash"->"Наличные";else->payment},14f,Color.LTGRAY)
+        }
+        if(s.optBoolean("show_address",true)) {
+            OrderDelivery.value(order,"pickup")?.let { label("А  $it") }
+            OrderDelivery.value(order,"destination")?.let { label("Б  $it") }
+        }
         val buttons=LinearLayout(context)
         buttons.addView(Button(context).apply { text="Открыть";setOnClickListener { context.startActivity(OrderDelivery.openIntent(context,order));hide() } },LinearLayout.LayoutParams(0,dp(50),1f))
         buttons.addView(Button(context).apply { text="Закрыть";setOnClickListener {hide()} },LinearLayout.LayoutParams(0,dp(50),1f))
@@ -52,7 +63,7 @@ class OverlayManager private constructor(private val context: Context) {
         header.setOnTouchListener { _,event ->
             when(event.action){MotionEvent.ACTION_DOWN->{startX=event.rawX;startY=event.rawY;originalX=params.x;originalY=params.y};MotionEvent.ACTION_MOVE->{params.x=(originalX+event.rawX-startX).toInt().coerceIn(0,maxOf(0,context.resources.displayMetrics.widthPixels-width));params.y=(originalY+event.rawY-startY).toInt().coerceIn(0,maxOf(0,context.resources.displayMetrics.heightPixels-root.height));windows.updateViewLayout(root,params)};MotionEvent.ACTION_UP->{prefs.store.edit().putInt("x",params.x).putInt("y",params.y).apply()}};true
         }
-        windows.addView(root,params);view=root;currentId=order.optString("order_id")
+        windows.addView(root,params);view=root;currentId=OrderDelivery.value(order,"order_id") ?: OrderDelivery.value(order,"event_id")
         if(s.optBoolean("auto_hide",true)) handler.postDelayed({hide()},s.optInt("display_seconds",15).coerceIn(5,30)*1000L)
     }
 }

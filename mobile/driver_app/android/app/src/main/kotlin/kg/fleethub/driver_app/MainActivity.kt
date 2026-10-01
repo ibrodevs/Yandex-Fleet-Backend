@@ -7,6 +7,7 @@ import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import kg.fleethub.driver_app.overlay.*
+import kg.fleethub.driver_app.yandex.MonitorLog
 import org.json.JSONObject
 
 class MainActivity: FlutterActivity() {
@@ -25,6 +26,7 @@ class MainActivity: FlutterActivity() {
                         result.success(null)
                     }
                     "setSession" -> { prefs.store.edit().putString("driver_id", call.arguments as? String).apply(); result.success(null) }
+                    "setFcmRegistered" -> { prefs.store.edit().putBoolean("fcm_registered", call.arguments == true).apply(); result.success(null) }
                     "setSettings" -> { prefs.settings = JSONObject(call.arguments as Map<*, *>); prefs.active = true; result.success(null) }
                     "getDriverMode" -> result.success(OrderOverlayService.instance != null && prefs.driverMode)
                     "setDriverMode" -> {
@@ -36,7 +38,7 @@ class MainActivity: FlutterActivity() {
                     "showTestOverlay" -> {
                         if (!Settings.canDrawOverlays(this)) { result.error("permission", "Разрешите показ поверх приложений", null) }
                         else {
-                            OverlayManager.get(this).show(JSONObject().put("is_test",true).put("order_id","local-test").put("tariff_title","Входящий заказ · пример").put("price",380).put("currency","RUB").put("distance_km",12).put("duration_minutes",20))
+                            OverlayManager.get(this).show(JSONObject().put("is_test",true).put("source","test").put("order_id","local-test").put("tariff_title","Входящий заказ · пример").put("price",380).put("currency","RUB").put("distance_km",12).put("duration_minutes",20))
                             result.success(null)
                         }
                     }
@@ -46,7 +48,7 @@ class MainActivity: FlutterActivity() {
                     "initialOrder" -> { result.success(intent.getStringExtra("order_id")); intent.removeExtra("order_id") }
                     else -> result.notImplemented()
                 }
-            } catch (e: Exception) { result.error("native", e.javaClass.simpleName, null) }
+            } catch (e: Exception) { MonitorLog.write(this, "ERROR", "APP", "Overlay channel failed: ${e.javaClass.simpleName}"); result.error("native", e.javaClass.simpleName, null) }
         }
     }
     override fun onNewIntent(intent: Intent) {

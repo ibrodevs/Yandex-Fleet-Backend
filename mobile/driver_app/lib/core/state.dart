@@ -189,6 +189,9 @@ class AppState extends ChangeNotifier {
             'device_id': id,
           },
         );
+        if (Platform.isAndroid) {
+          await overlayChannel.invokeMethod('setFcmRegistered', true);
+        }
       }
 
       await register(await FirebaseMessaging.instance.getToken());

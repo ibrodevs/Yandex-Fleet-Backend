@@ -17,8 +17,8 @@ class OrderOverlayService: Service() {
     }
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if(intent?.action=="STOP") { OverlayPreferences(this).driverMode=false; stopSelf() }
-        return START_NOT_STICKY
+        return START_STICKY
     }
-    override fun onDestroy() { instance=null; OverlayPreferences(this).driverMode=false; OverlayManager.get(this).hide(); super.onDestroy() }
+    override fun onDestroy() { instance=null; OverlayManager.get(this).hide(); super.onDestroy() }
     override fun onBind(intent: Intent?): IBinder? = null
 }
