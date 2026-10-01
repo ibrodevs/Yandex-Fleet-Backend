@@ -27,3 +27,6 @@ ENV/
 .data/
 
 .codex-ppt-build/
+
+# Generated Android packages are distributed outside Git.
+mobile/driver_app/dist/*.apk

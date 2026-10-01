@@ -69,6 +69,7 @@ class AppState extends ChangeNotifier {
     busy = true;
     error = null;
     notifyListeners();
+
     try {
       await api.login(idToken);
       notifyListeners();

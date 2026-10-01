@@ -32,6 +32,10 @@ object YandexDiagnostics {
 
     fun status(context: Context): Map<String, Any?> = mapOf(
         "installed" to installed(context), "accessibility" to enabled(context),
+        "notificationAccess" to YandexNotificationListenerService.hasAccess(context),
+        "notificationListener" to YandexNotificationListenerService.connected,
+        "monitorDebug" to context.getSharedPreferences("yandex_monitor", Context.MODE_PRIVATE).getBoolean("debug", false),
+        "driverLinked" to (context.getSharedPreferences("fleet_overlay", Context.MODE_PRIVATE).getString("driver_id", null) != null),
         "overlay" to Settings.canDrawOverlays(context), "connected" to connected,
         "debugAvailable" to debugAvailable, "recording" to recording,
         "lastEvent" to lastEvent, "stage" to "diagnostics_only",

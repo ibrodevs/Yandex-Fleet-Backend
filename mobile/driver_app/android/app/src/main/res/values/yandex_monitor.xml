@@ -1,0 +1,5 @@
+<resources>
+    <string-array name="yandex_pro_packages">
+        <item>ru.yandex.taximeter</item>
+    </string-array>
+</resources>

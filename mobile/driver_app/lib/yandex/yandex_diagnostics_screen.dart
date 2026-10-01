@@ -65,11 +65,11 @@ class _YandexDiagnosticsScreenState extends State<YandexDiagnosticsScreen>
 
   Future<void> copy() async {
     try {
-      final text = await methods.invokeMethod<String>('getDebugLog');
+      final text = await methods.invokeMethod<String>('getMonitorLog');
       await Clipboard.setData(ClipboardData(text: text ?? ''));
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Журнал скопирован')));
+            .showSnackBar(const SnackBar(content: Text('Логи скопированы')));
       }
     } catch (e) {
       showError(e);
@@ -109,9 +109,40 @@ class _YandexDiagnosticsScreenState extends State<YandexDiagnosticsScreen>
     body: ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        const Text(
-          'Диагностический этап. Сервис читает доступные элементы экрана Yandex Pro. Обнаружение заказов и действия с ними ещё не включены: сначала нужно проверить дерево реального входящего предложения.',
+        const Text('Мониторинг входящих предложений Yandex Pro работает через доступ к уведомлениям. Fleet API проверяется отдельно на сервере. Доступные поля зависят от текста реального уведомления.'),
+        const SizedBox(height: 16),
+        row('Доступ к уведомлениям', 'notificationAccess', action: 'openNotificationAccessSettings'),
+        row('Сервис мониторинга подключён', 'notificationListener'),
+        row('Водитель привязан', 'driverLinked'),
+        OutlinedButton(
+          onPressed: () async {
+            await refresh();
+            if (!mounted) return;
+            final ready = status['notificationAccess'] == true &&
+                status['notificationListener'] == true && status['driverLinked'] == true;
+            ScaffoldMessenger.of(this.context).showSnackBar(SnackBar(content: Text(
+              ready ? 'Мониторинг готов' : 'Мониторинг недоступен: проверьте доступ к уведомлениям и вход водителя',
+            )));
+          },
+          child: const Text('Проверить мониторинг'),
         ),
+        SwitchListTile(
+          title: const Text('Режим отладки мониторинга'),
+          value: status['monitorDebug'] == true,
+          onChanged: (v) => invoke('setMonitorDebug', v),
+        ),
+        if (status['monitorDebug'] == true) ...[
+          const Text('Логи мониторинга'),
+          Wrap(spacing: 8, children: [
+            OutlinedButton(onPressed: copy, child: const Text('Копировать')),
+            TextButton(onPressed: () => invoke('clearMonitorLog'), child: const Text('Очистить')),
+            TextButton(onPressed: () => invoke('shareMonitorLog'), child: const Text('Сохранить')),
+          ]),
+          FutureBuilder<String?>(
+            future: methods.invokeMethod<String>('getMonitorLog'),
+            builder: (_, snapshot) => SelectableText(snapshot.data ?? 'Загрузка журнала…'),
+          ),
+        ],
         const SizedBox(height: 16),
         Card(
           child: ListTile(

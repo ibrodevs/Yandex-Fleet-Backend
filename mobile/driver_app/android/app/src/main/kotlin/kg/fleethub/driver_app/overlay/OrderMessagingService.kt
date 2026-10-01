@@ -10,6 +10,8 @@ import android.util.Log
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import kg.fleethub.driver_app.MainActivity
+import kg.fleethub.driver_app.yandex.IncomingOrderDeduplicator
+import kg.fleethub.driver_app.yandex.MonitorLog
 import org.json.JSONObject
 
 private const val TAG = "FleetFCM"
@@ -20,7 +22,7 @@ class OrderMessagingService : FirebaseMessagingService() {
         Log.d(TAG, "========================================")
         Log.d(TAG, "🔥 FCM RECEIVED")
         Log.d(TAG, "messageId=${message.messageId}")
-        Log.d(TAG, "data=${message.data}")
+        MonitorLog.write(this, "INFO", "FCM", "FCM received message_id=${message.messageId?.hashCode()}")
 
         val payload = message.data["payload"]
 
@@ -29,7 +31,6 @@ class OrderMessagingService : FirebaseMessagingService() {
             return
         }
 
-        Log.d(TAG, "📦 payload=$payload")
 
         try {
             val order = JSONObject(payload)
@@ -37,6 +38,7 @@ class OrderMessagingService : FirebaseMessagingService() {
             Log.d(TAG, "✅ JSON parsed")
             Log.d(TAG, "order_id=${order.optString("order_id")}")
             Log.d(TAG, "driver_id=${order.optString("driver_id")}")
+            MonitorLog.write(this, "INFO", "FCM", "Order payload parsed", order.optString("event_id"), order.optString("order_id"))
 
             Handler(Looper.getMainLooper()).post {
                 Log.d(TAG, "➡️ OrderDelivery.deliver()")
@@ -44,6 +46,7 @@ class OrderMessagingService : FirebaseMessagingService() {
             }
         } catch (e: Exception) {
             Log.e(TAG, "❌ Ошибка обработки payload", e)
+            MonitorLog.write(this, "ERROR", "FCM", "Payload failed: ${e.javaClass.simpleName}")
         }
     }
 }
@@ -128,12 +131,6 @@ object OrderDelivery {
 
         if (seen.contains(id)) {
             Log.w(TAG, "⚠️ Заказ уже был получен: $id")
-
-            if (manager.currentId == id) {
-                Log.d(TAG, "♻️ Повторно показываем текущий overlay")
-                manager.show(order)
-            }
-
             return
         }
 
@@ -148,6 +145,17 @@ object OrderDelivery {
         if (!notifications.areNotificationsEnabled()) {
             Log.e(TAG, "❌ Android запретил уведомления")
             return
+        }
+
+        var dedupEventId: String? = null
+        if (!order.optBoolean("is_test")) {
+            val eventId = order.optString("event_id").ifBlank { "fleet_$id" }
+            if (!IncomingOrderDeduplicator.shouldShow(context, eventId, id,
+                    order.optString("price").ifBlank { null }, order.optString("pickup").ifBlank { null })) {
+                MonitorLog.write(context, "DEBUG", "DEDUP", "Duplicate FCM ignored", eventId, id)
+                return
+            }
+            dedupEventId = eventId
         }
 
         var shown = false
@@ -228,11 +236,12 @@ object OrderDelivery {
                 "Новый заказ"
             }
 
-        val body =
-            "${text(order, "tariff_title")} · " +
-                "${text(order, "price")} ${text(order, "currency")}\n" +
-                "${text(order, "pickup")} → " +
-                text(order, "destination")
+        val body = listOfNotNull(
+            order.optString("tariff_title").ifBlank { null },
+            order.optString("price").ifBlank { null }?.let { it + " " + order.optString("currency") },
+            order.optString("pickup").ifBlank { null },
+            order.optString("destination").ifBlank { null }
+        ).joinToString(" · ").ifBlank { "Откройте приложение для деталей заказа" }
 
         try {
             Log.d(TAG, "🔔 Показываем системное уведомление")
@@ -272,6 +281,8 @@ object OrderDelivery {
                 .apply()
 
             Log.d(TAG, "✅ order_id сохранён в seen")
+        } else {
+            dedupEventId?.let { IncomingOrderDeduplicator.forget(context, it) }
         }
 
         Log.d(TAG, "🏁 OrderDelivery.deliver() END")

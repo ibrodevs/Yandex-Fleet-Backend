@@ -27,6 +27,23 @@ class YandexBridgePlugin : FlutterPlugin {
             try {
                 when (call.method) {
                     "getServiceStatus" -> result.success(YandexDiagnostics.status(context))
+                    "isNotificationAccessGranted" -> result.success(YandexNotificationListenerService.hasAccess(context))
+                    "openNotificationAccessSettings" -> {
+                        open(context, Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS), Intent(Settings.ACTION_SETTINGS)); result.success(null)
+                    }
+                    "setMonitorDebug" -> {
+                        context.getSharedPreferences("yandex_monitor", Context.MODE_PRIVATE).edit().putBoolean("debug", call.arguments == true).apply()
+                        result.success(null)
+                    }
+                    "getMonitorLog" -> result.success(MonitorLog.read(context))
+                    "clearMonitorLog" -> { MonitorLog.clear(context); result.success(null) }
+                    "shareMonitorLog" -> {
+                        val share = Intent(Intent.ACTION_SEND).setType("text/plain")
+                            .putExtra(Intent.EXTRA_SUBJECT, "Yandex monitor diagnostics")
+                            .putExtra(Intent.EXTRA_TEXT, MonitorLog.read(context))
+                        context.startActivity(Intent.createChooser(share, "Сохранить логи мониторинга").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                        result.success(null)
+                    }
                     "isYandexInstalled" -> result.success(YandexDiagnostics.installed(context))
                     "isAccessibilityEnabled" -> result.success(YandexDiagnostics.enabled(context))
                     "canDrawOverlays" -> result.success(Settings.canDrawOverlays(context))
