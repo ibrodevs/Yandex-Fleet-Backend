@@ -67,12 +67,16 @@ class YandexBridgePlugin : FlutterPlugin {
                     "clearDebugLog" -> { YandexDiagnostics.clear(); result.success(null) }
                     else -> result.notImplemented()
                 }
-            } catch (e: Exception) { MonitorLog.write(context, "ERROR", "FLUTTER", "Yandex channel failed: ${e.javaClass.simpleName}"); result.error("yandex_diagnostics", "Не удалось выполнить действие: ${e.javaClass.simpleName}", null) }
+            } catch (e: Exception) {
+                MonitorLog.write(context, "ERROR", "FLUTTER", "Yandex channel failed method=${call.method} error=${e.javaClass.simpleName}")
+                result.error("yandex_diagnostics", "Не удалось выполнить действие: ${e.javaClass.simpleName}", null)
+            }
         }
     }
     private fun open(context: Context, intent: Intent, fallback: Intent) {
         try { context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
         catch (_: android.content.ActivityNotFoundException) { context.startActivity(fallback.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        catch (_: SecurityException) { context.startActivity(fallback.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
     }
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         methods.setMethodCallHandler(null); events.setStreamHandler(null); YandexDiagnostics.listener = null

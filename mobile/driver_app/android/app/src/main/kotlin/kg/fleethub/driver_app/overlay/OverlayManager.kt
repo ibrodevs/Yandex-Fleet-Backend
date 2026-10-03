@@ -53,6 +53,8 @@ class OverlayManager private constructor(private val context: Context) {
             OrderDelivery.value(order,"pickup")?.let { label("А  $it") }
             OrderDelivery.value(order,"destination")?.let { label("Б  $it") }
         }
+        if (listOf("tariff_title", "price", "pickup", "destination").all { OrderDelivery.value(order, it) == null })
+            label("Откройте Яндекс Про для деталей заказа", 16f, Color.LTGRAY)
         val buttons=LinearLayout(context)
         buttons.addView(Button(context).apply { text="Открыть";setOnClickListener { context.startActivity(OrderDelivery.openIntent(context,order));hide() } },LinearLayout.LayoutParams(0,dp(50),1f))
         buttons.addView(Button(context).apply { text="Закрыть";setOnClickListener {hide()} },LinearLayout.LayoutParams(0,dp(50),1f))

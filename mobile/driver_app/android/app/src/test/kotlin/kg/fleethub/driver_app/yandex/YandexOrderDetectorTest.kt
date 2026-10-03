@@ -17,10 +17,19 @@ class YandexOrderDetectorTest {
         assertNull(result.destination)
     }
 
-    @Test fun rejectsVagueOfferAndServiceMessages() {
-        assertFalse(YandexOrderDetector.detect(payload("Новый заказ")).isOrder)
+    @Test fun acceptsExactYandexOfferWithoutPriceOrAddress() {
+        val result = YandexOrderDetector.detect(payload("Яндекс Про", "Новый заказ"))
+        assertTrue(result.isOrder)
+        assertEquals("high", result.confidence)
+        assertNull(result.price)
+        assertNull(result.pickup)
+    }
+
+    @Test fun rejectsServiceMessagesAndNonExactOfferPhrases() {
+        assertFalse(YandexOrderDetector.detect(payload("Яндекс Про", "Новый заказ в городе")).isOrder)
         assertFalse(YandexOrderDetector.detect(payload("Заказ отменён", "350 ₽")).isOrder)
         assertFalse(YandexOrderDetector.detect(payload("Новости сервиса", "350 ₽")).isOrder)
+        assertFalse(YandexOrderDetector.detect(payload("Новости сервиса", "Новый заказ")).isOrder)
     }
 
     @Test fun acceptsAddressWithoutPrice() {
@@ -32,9 +41,29 @@ class YandexOrderDetectorTest {
     }
 
     @Test fun mediumOfferIsLoggedButNotDelivered() {
-        val result = YandexOrderDetector.detect(payload("Новый заказ"))
+        val result = YandexOrderDetector.detect(payload("Предложение заказа"))
         assertFalse(result.isOrder)
         assertEquals("medium", result.confidence)
+    }
+
+    @Test fun reusedNotificationKeyCreatesNewEventAfterStatusTransition() {
+        val first = YandexOfferTracker.transition(YandexOfferState(), true, false, 1_000L)
+        val update = YandexOfferTracker.transition(first, true, false, 2_000L)
+        val idle = YandexOfferTracker.transition(update, false, true, 3_000L)
+        val second = YandexOfferTracker.transition(idle, true, false, 4_000L)
+        assertEquals(1L, first.generation)
+        assertEquals(first, update)
+        assertEquals(2L, second.generation)
+        assertTrue(second.showing)
+    }
+
+    @Test fun repeatedOfferWithoutStatusIsNotRedisplayed() {
+        val first = YandexOfferTracker.transition(YandexOfferState(), true, false, 1_000L)
+        val repeat = YandexOfferTracker.transition(first, true, false, 20_000L)
+        assertEquals(first, repeat)
+        val previous = IncomingOrderKey("local_1", null, "driver-1", null, null, "yandex_notification", 1_000L)
+        val duplicate = previous.copy(time = 200_000L)
+        assertEquals("same-event", IncomingOrderDeduplicator.decide(listOf(previous), duplicate).reason)
     }
 
     @Test fun sameNotificationKeyKeepsEventIdAcrossUpdates() {

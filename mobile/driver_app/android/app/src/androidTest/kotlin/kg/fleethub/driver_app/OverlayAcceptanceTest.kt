@@ -62,6 +62,19 @@ class OverlayAcceptanceTest {
             assertNull("Dismissed event must not reopen",OverlayManager.get(context).currentId)
         }
     }
+    @Test fun testTitleOnlyYandexOfferShowsOverlay() {
+        assertTrue("Grant SYSTEM_ALERT_WINDOW app-op before running", Settings.canDrawOverlays(context))
+        prepare()
+        onMain {
+            OverlayPreferences(context).driverMode = true
+            val eventId = "yandex_evt_title_only_${System.nanoTime()}"
+            val offer = JSONObject().put("type", "new_order").put("source", "yandex_notification")
+                .put("event_id", eventId).put("order_id", "")
+                .put("driver_id", "test-driver")
+            OrderDelivery.deliver(context, offer)
+            assertEquals(eventId, OverlayManager.get(context).currentId)
+        }
+    }
     @Test fun testOffDutyNotificationFallback() {
         prepare()
         onMain {

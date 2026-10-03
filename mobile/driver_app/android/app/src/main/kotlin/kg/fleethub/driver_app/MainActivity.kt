@@ -25,9 +25,13 @@ class MainActivity: FlutterActivity() {
                         startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
                         result.success(null)
                     }
-                    "setSession" -> { prefs.store.edit().putString("driver_id", call.arguments as? String).apply(); result.success(null) }
+                    "setSession" -> {
+                        val driverId = (call.arguments as? String)?.takeIf { it.isNotBlank() }
+                        prefs.store.edit().putString("driver_id", driverId).putBoolean("active", driverId != null).apply()
+                        result.success(null)
+                    }
                     "setFcmRegistered" -> { prefs.store.edit().putBoolean("fcm_registered", call.arguments == true).apply(); result.success(null) }
-                    "setSettings" -> { prefs.settings = JSONObject(call.arguments as Map<*, *>); prefs.active = true; result.success(null) }
+                    "setSettings" -> { prefs.settings = JSONObject(call.arguments as Map<*, *>); prefs.active = !prefs.store.getString("driver_id", null).isNullOrBlank(); result.success(null) }
                     "getDriverMode" -> result.success(OrderOverlayService.instance != null && prefs.driverMode)
                     "setDriverMode" -> {
                         val enabled = call.arguments == true

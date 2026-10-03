@@ -60,10 +60,12 @@ object OrderDelivery {
     }
 
     fun notificationsAllowed(context: Context): Boolean {
-        val manager = context.getSystemService(NotificationManager::class.java)
-        val runtime = Build.VERSION.SDK_INT < 33 ||
-            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
-        return runtime && manager.areNotificationsEnabled()
+        return try {
+            val manager = context.getSystemService(NotificationManager::class.java)
+            val runtime = Build.VERSION.SDK_INT < 33 ||
+                context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+            runtime && manager.areNotificationsEnabled()
+        } catch (_: SecurityException) { false }
     }
 
     fun deliver(context: Context, order: JSONObject) {
@@ -112,7 +114,11 @@ object OrderDelivery {
         }
 
         val settings = prefs.settings
-        val permission = Settings.canDrawOverlays(context)
+        val permission = try { Settings.canDrawOverlays(context) }
+            catch (e: SecurityException) {
+                MonitorLog.write(context, "ERROR", "OVERLAY", "Overlay permission check failed: SecurityException source=$source", eventId, orderId)
+                false
+            }
         val overlayEnabled = settings.optBoolean("overlay_enabled", true)
         var serviceAvailable = OrderOverlayService.instance != null
         if (prefs.driverMode && overlayEnabled && permission && !serviceAvailable) {

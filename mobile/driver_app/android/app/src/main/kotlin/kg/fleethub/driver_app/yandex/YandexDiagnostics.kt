@@ -20,6 +20,15 @@ object YandexDiagnostics {
     private val entries = ArrayDeque<String>()
     private var size = 0
     var listener: ((Map<String, Any?>) -> Unit)? = null
+    private val reportedStatusFailures = mutableSetOf<String>()
+
+    private fun statusFlag(context: Context, name: String, read: () -> Boolean): Boolean = try {
+        read()
+    } catch (e: SecurityException) {
+        if (synchronized(reportedStatusFailures) { reportedStatusFailures.add(name) })
+            MonitorLog.write(context, "WARN", "PERMISSION", "Status unavailable name=$name error=SecurityException")
+        false
+    }
 
     fun installed(context: Context): Boolean = context.resources.getStringArray(kg.fleethub.driver_app.R.array.yandex_pro_packages).any { name ->
         runCatching { context.packageManager.getPackageInfo(name, 0); true }.getOrDefault(false)
@@ -33,17 +42,18 @@ object YandexDiagnostics {
     }
 
     fun status(context: Context): Map<String, Any?> = mapOf(
-        "installed" to installed(context), "accessibility" to enabled(context),
-        "notificationAccess" to YandexNotificationListenerService.hasAccess(context),
+        "installed" to installed(context),
+        "accessibility" to statusFlag(context, "accessibility") { enabled(context) },
+        "notificationAccess" to statusFlag(context, "notificationAccess") { YandexNotificationListenerService.hasAccess(context) },
         "notificationListener" to YandexNotificationListenerService.connected,
-        "fleetNotifications" to OrderDelivery.notificationsAllowed(context),
+        "fleetNotifications" to statusFlag(context, "fleetNotifications") { OrderDelivery.notificationsAllowed(context) },
         "monitoringActive" to OverlayPreferences(context).active,
         "driverMode" to OverlayPreferences(context).driverMode,
         "overlayService" to (OrderOverlayService.instance != null),
         "fcmRegistered" to OverlayPreferences(context).store.getBoolean("fcm_registered", false),
         "monitorDebug" to context.getSharedPreferences("yandex_monitor", Context.MODE_PRIVATE).getBoolean("debug", false),
         "driverLinked" to (context.getSharedPreferences("fleet_overlay", Context.MODE_PRIVATE).getString("driver_id", null) != null),
-        "overlay" to Settings.canDrawOverlays(context), "connected" to connected,
+        "overlay" to statusFlag(context, "overlay") { Settings.canDrawOverlays(context) }, "connected" to connected,
         "debugAvailable" to debugAvailable, "recording" to recording,
         "lastEvent" to lastEvent, "stage" to "diagnostics_only",
     )

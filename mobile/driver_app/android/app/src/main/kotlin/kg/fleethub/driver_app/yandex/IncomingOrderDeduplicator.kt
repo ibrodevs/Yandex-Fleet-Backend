@@ -32,7 +32,7 @@ object IncomingOrderDeduplicator {
     fun decide(previous: List<IncomingOrderKey>, incoming: IncomingOrderKey): DedupDecision {
         for (item in previous) {
             if (item.driverId != incoming.driverId) continue
-            if (item.eventId == incoming.eventId && incoming.time - item.time in 0..WINDOW_MS)
+            if (item.eventId == incoming.eventId)
                 return DedupDecision(false, "same-event", item.eventId)
             if (!incoming.orderId.isNullOrBlank() && item.orderId == incoming.orderId)
                 return DedupDecision(false, "same-order", item.eventId)

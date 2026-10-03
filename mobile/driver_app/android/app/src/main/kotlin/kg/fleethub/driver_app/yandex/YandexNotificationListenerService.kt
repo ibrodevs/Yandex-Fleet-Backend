@@ -18,9 +18,11 @@ class YandexNotificationListenerService : NotificationListenerService() {
         @Volatile var connected = false
             private set
         fun hasAccess(context: Context): Boolean {
-            val enabled = Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners") ?: return false
-            val expected = ComponentName(context, YandexNotificationListenerService::class.java)
-            return enabled.split(':').any { ComponentName.unflattenFromString(it) == expected }
+            return try {
+                val enabled = Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners") ?: return false
+                val expected = ComponentName(context, YandexNotificationListenerService::class.java)
+                enabled.split(':').any { ComponentName.unflattenFromString(it) == expected }
+            } catch (_: SecurityException) { false }
         }
     }
 
@@ -56,12 +58,12 @@ class YandexNotificationListenerService : NotificationListenerService() {
                 extras.getCharSequence(Notification.EXTRA_TEXT)?.toString().orEmpty(),
                 extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString().orEmpty(),
                 extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString().orEmpty(), n.category)
-            val id = IncomingOrderDeduplicator.eventId(payload)
+            val result = YandexOrderDetector.detect(payload)
+            val id = YandexOfferTracker.eventId(this, payload, result.isOrder)
             val debug = getSharedPreferences("yandex_monitor", Context.MODE_PRIVATE).getBoolean("debug", false)
             MonitorLog.write(this, "INFO", "YANDEX_NOTIFICATION", "Notification received package=${sbn.packageName} key_hash=${sbn.key.hashCode()} category=${n.category} timestamp=${sbn.postTime}", id)
             if (debug) MonitorLog.write(this, "DEBUG", "YANDEX_NOTIFICATION",
                 "title=${payload.title.take(300)} text=${payload.text.take(300)} big_text=${payload.bigText.take(300)} sub_text=${payload.subText.take(300)} extras_keys=${extras.keySet().joinToString().take(300)}", id)
-            val result = YandexOrderDetector.detect(payload)
             MonitorLog.write(this, "INFO", "ORDER_DETECTOR", "is_order=${result.isOrder} confidence=${result.confidence} source=yandex_notification", id)
             if (!result.isOrder) {
                 if (result.confidence == "medium") MonitorLog.write(this, "DEBUG", "ORDER_DETECTOR", "Potential order detected but not shown", id)
