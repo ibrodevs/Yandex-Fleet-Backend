@@ -163,7 +163,20 @@ class FleetApi extends ChangeNotifier {
 
   Future<dynamic> get(String path) async {
     try {
-      final response = await _request('GET', path, () => _dio.get(path));
+      Future<Response<dynamic>> fetch() =>
+          _request('GET', path, () => _dio.get(path));
+      late final Response<dynamic> response;
+      try {
+        response = await fetch();
+      } on DioException catch (e) {
+        if (e.response != null || e.type != DioExceptionType.connectionError) {
+          rethrow;
+        }
+        // A VPN route change can invalidate a reused socket. A GET is safe to
+        // resend once after the adapter opens a new connection.
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+        response = await fetch();
+      }
 
       await storage.write(key: 'cache:$path', value: jsonEncode(response.data));
       return response.data;

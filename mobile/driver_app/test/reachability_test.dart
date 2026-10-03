@@ -158,6 +158,49 @@ void main() {
     expect(state.error, contains('временно недоступны'));
   });
 
+  test(
+    'partial transport failure is reported accurately and retried',
+    () async {
+      state.dispose();
+      state = AppState(
+        api,
+        false,
+        retryInterval: const Duration(milliseconds: 100),
+      );
+      await api.storage.delete(key: 'cache:/me');
+      final refresh = state.refresh();
+      await requests.waitFor(5);
+      requests.fail('/me');
+      for (final entry in refreshData.entries.where((e) => e.key != '/me')) {
+        requests.success(entry.key, entry.value);
+      }
+      await refresh;
+      expect(api.backendUnavailable, isFalse);
+      expect(state.error, contains('Часть данных не загрузилась'));
+
+      await requests.waitFor(10).timeout(const Duration(seconds: 2));
+      final recovered = Completer<void>();
+      state.addListener(() {
+        if (state.error == null && !recovered.isCompleted) recovered.complete();
+      });
+      for (final entry in refreshData.entries) {
+        requests.success(entry.key, entry.value);
+      }
+      await recovered.future.timeout(const Duration(seconds: 2));
+      expect(state.driver['id'], 'driver');
+    },
+  );
+
+  test('GET retries a dropped connection once', () async {
+    final request = api.get('/probe');
+    await requests.waitFor(1);
+    requests.fail('/probe', type: DioExceptionType.connectionError);
+    await requests.waitFor(2).timeout(const Duration(seconds: 2));
+    requests.success('/probe', {'ok': true});
+    expect(await request, {'ok': true});
+    expect(api.backendUnavailable, isFalse);
+  });
+
   for (final testLogin in [false, true]) {
     test(
       '${testLogin ? 'test' : 'Firebase'} login notifies after JWT before refresh completes',
@@ -360,6 +403,10 @@ void main() {
       final get = api.get('/settings');
       await requests.waitFor(1);
       requests.fail('/settings', type: type);
+      if (type == DioExceptionType.connectionError) {
+        await requests.waitFor(2).timeout(const Duration(seconds: 2));
+        requests.fail('/settings', type: type);
+      }
       expect(await get, isEmpty);
       expect(api.offline, isTrue);
     });

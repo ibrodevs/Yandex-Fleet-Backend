@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:dio/dio.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
@@ -29,20 +30,32 @@ class AppState extends ChangeNotifier {
   void Function(String)? openOrder;
   Future<void>? _refreshTask;
   Timer? _retryTimer;
-  AppState(this.api, this.firebaseReady) {
+  bool _refreshIncomplete = false;
+  final Duration retryInterval;
+  AppState(
+    this.api,
+    this.firebaseReady, {
+    this.retryInterval = const Duration(seconds: 30),
+  }) {
     api.addListener(_onReachabilityChanged);
   }
 
   void _onReachabilityChanged() {
-    if (api.backendUnavailable && signedIn) {
-      _retryTimer ??= Timer.periodic(const Duration(seconds: 30), (_) {
-        if (signedIn && api.backendUnavailable) unawaited(refresh());
+    _updateRetryTimer();
+    notifyListeners();
+  }
+
+  void _updateRetryTimer() {
+    if (signedIn && (api.backendUnavailable || _refreshIncomplete)) {
+      _retryTimer ??= Timer.periodic(retryInterval, (_) {
+        if (signedIn && (api.backendUnavailable || _refreshIncomplete)) {
+          unawaited(refresh());
+        }
       });
     } else {
       _retryTimer?.cancel();
       _retryTimer = null;
     }
-    notifyListeners();
   }
 
   bool get signedIn => api.token != null;
@@ -116,7 +129,8 @@ class AppState extends ChangeNotifier {
   Future<void> _refresh() async {
     if (!signedIn) return;
 
-    String? firstError;
+    Object? firstError;
+    var loaded = 0;
 
     Future<void> load(
       String path,
@@ -128,9 +142,10 @@ class AppState extends ChangeNotifier {
         if (!signedIn) return;
 
         await apply(value);
+        loaded++;
         notifyListeners();
       } catch (e) {
-        firstError ??= errorMessage(e);
+        firstError ??= e;
       }
     }
 
@@ -167,7 +182,18 @@ class AppState extends ChangeNotifier {
       }),
     ]);
 
-    error = firstError;
+    final failure = firstError;
+    _refreshIncomplete = failure != null;
+    if (failure == null || api.backendUnavailable) {
+      error = null;
+    } else if (loaded > 0 &&
+        failure is DioException &&
+        failure.response == null) {
+      error = 'Часть данных не загрузилась. Повторите обновление.';
+    } else {
+      error = errorMessage(failure);
+    }
+    _updateRetryTimer();
     notifyListeners();
   }
 
@@ -275,6 +301,8 @@ class AppState extends ChangeNotifier {
       await overlayChannel.invokeMethod('clearSession');
     }
     await api.clear();
+    _refreshIncomplete = false;
+    _updateRetryTimer();
     if (firebaseReady) {
       await FirebaseAuth.instance.signOut();
     }

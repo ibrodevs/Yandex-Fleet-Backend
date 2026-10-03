@@ -22,6 +22,7 @@ class FakeYandexClient:
         self.cars = cars or []
         self.order_calls = []
         self.profile_calls = 0
+        self.profile_filters = []
         self.search_calls = []
 
     async def list_driver_profiles(
@@ -33,6 +34,7 @@ class FakeYandexClient:
         retry_safe=True,
     ):
         self.profile_calls += 1
+        self.profile_filters.append(driver_profile_ids)
         if search_text:
             self.search_calls.append(search_text)
         items = deepcopy(self.profiles)
@@ -40,10 +42,10 @@ class FakeYandexClient:
             items = [item for item in items if item["driver_profile"]["id"] in driver_profile_ids]
         if search_text:
             items = [
-                item for item in items
-                if search_text in {
-                    normalize_phone(phone) for phone in item["driver_profile"].get("phones", [])
-                }
+                item
+                for item in items
+                if search_text
+                in {normalize_phone(phone) for phone in item["driver_profile"].get("phones", [])}
             ]
         return items[:max_records] if max_records else items
 
@@ -103,7 +105,7 @@ async def test_driver_lookup_and_phone_exact_normalized_match(tmp_path):
     assert (await provider.get_driver_by_phone("+996555123456"))["id"] == "driver-1"
     assert (await provider.get_driver_by_phone("0555 123 456"))["id"] == "driver-1"
     assert await provider.get_driver_by_phone("+996700000000") is None
-    assert client.profile_calls == 1
+    assert client.profile_calls == 5
 
 
 @pytest.mark.asyncio
@@ -159,9 +161,61 @@ async def test_provider_filters_orders_and_enforces_result_ownership(tmp_path):
     provider = YandexFleetProvider(client, settings=settings(tmp_path))
     items = await provider.list_orders(driver_id="driver-1")
     assert [item["id"] for item in items] == ["order-1"]
-    assert client.order_calls[0].get("driver_profile_id") is None
-    assert len(await provider.list_orders()) == 2
+    assert client.order_calls[0].get("driver_profile_id") == "driver-1"
+    assert client.order_calls[0].get("retry_safe") is False
+    assert [item["id"] for item in await provider.list_orders(driver_id="driver-1")] == ["order-1"]
     assert len(client.order_calls) == 1
+    assert len(await provider.list_orders()) == 2
+    assert len(client.order_calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_cold_driver_lookup_uses_exact_id_and_caches_result(tmp_path):
+    client = FakeYandexClient(profiles=[driver_fixture()])
+    provider = YandexFleetProvider(client, settings=settings(tmp_path))
+
+    assert (await provider.get_driver("driver-1"))["id"] == "driver-1"
+    assert (await provider.get_driver("driver-1"))["id"] == "driver-1"
+    assert client.profile_calls == 1
+    assert client.profile_filters == [["driver-1"]]
+    assert await provider.cache.get("drivers:park:default") is None
+
+
+@pytest.mark.asyncio
+async def test_fresh_park_snapshot_avoids_extra_driver_queries(tmp_path):
+    client = FakeYandexClient(profiles=[driver_fixture()], orders=[order_fixture()])
+    provider = YandexFleetProvider(client, settings=settings(tmp_path))
+
+    await provider.list_drivers()
+    await provider.list_orders()
+    assert (await provider.get_driver("driver-1"))["id"] == "driver-1"
+    assert [item["id"] for item in await provider.list_orders(driver_id="driver-1")] == ["order-1"]
+    assert client.profile_calls == 1
+    assert len(client.order_calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_stale_park_profile_survives_temporary_exact_lookup_failure(tmp_path):
+    now = [100.0]
+
+    class FailingExactClient(FakeYandexClient):
+        async def list_driver_profiles(self, **kwargs):
+            if kwargs.get("driver_profile_ids"):
+                raise YandexRateLimitError()
+            return await super().list_driver_profiles(**kwargs)
+
+    client = FailingExactClient(profiles=[driver_fixture()])
+    cfg = settings(
+        tmp_path,
+        YANDEX_DRIVER_CACHE_TTL_SECONDS=10,
+        YANDEX_CACHE_STALE_SECONDS=60,
+    )
+    cache = SharedYandexCache(cfg.YANDEX_CACHE_DB_PATH, clock=lambda: now[0])
+    provider = YandexFleetProvider(client, settings=cfg, cache=cache)
+    await provider.list_drivers()
+    now[0] += 11
+
+    assert (await provider.get_driver("driver-1"))["id"] == "driver-1"
 
 
 @pytest.mark.asyncio
@@ -184,21 +238,20 @@ async def test_real_summary_and_unsupported_completion(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_concurrent_standard_reads_share_single_orders_refresh(tmp_path):
+async def test_concurrent_driver_reads_share_single_orders_refresh(tmp_path):
     own = order_fixture()
     client = FakeYandexClient(profiles=[driver_fixture()], orders=[own])
     provider = YandexFleetProvider(client, settings=settings(tmp_path))
 
-    all_orders, owned_orders, summary = await asyncio.gather(
-        provider.list_orders(),
+    owned_orders, summary = await asyncio.gather(
         provider.list_orders(driver_id="driver-1"),
         provider.get_driver_summary("driver-1"),
     )
 
-    assert [item["id"] for item in all_orders] == ["order-1"]
     assert [item["id"] for item in owned_orders] == ["order-1"]
     assert summary["orders_total"] == 1
     assert len(client.order_calls) == 1
+    assert client.order_calls[0]["driver_profile_id"] == "driver-1"
     assert client.profile_calls == 1
 
 

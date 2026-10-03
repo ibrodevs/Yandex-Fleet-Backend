@@ -126,6 +126,61 @@ class YandexFleetProvider(FleetProvider):
             )
         )
 
+    async def _driver_orders_snapshot(self, driver_id: str) -> list[dict[str, Any]]:
+        # The worker may already have a fresh park snapshot. Otherwise query
+        # only this driver's orders so a mobile refresh does not paginate the
+        # entire park while the phone waits for a response.
+        park_entry = await self.cache.get("orders:park:default")
+        park_age = (
+            max(0.0, self.cache.clock() - park_entry.updated_at)
+            if park_entry and isinstance(park_entry.payload, list)
+            else None
+        )
+
+        def park_driver_orders() -> list[dict[str, Any]]:
+            assert park_entry is not None
+            return [
+                order
+                for order in park_entry.payload
+                if str((order.get("driver_profile") or {}).get("id")) == driver_id
+            ]
+
+        if park_age is not None and park_age <= self.settings.YANDEX_ORDERS_CACHE_TTL_SECONDS:
+            return park_driver_orders()
+
+        async def refresh() -> list[dict[str, Any]]:
+            booked_from, booked_to = self._date_range()
+            return await self.client.list_orders(
+                booked_from=booked_from,
+                booked_to=booked_to,
+                driver_profile_id=driver_id,
+                retry_safe=False,
+            )
+
+        async def snapshot() -> list[dict[str, Any]]:
+            try:
+                return await self.cache.get_or_refresh(
+                    f"orders:driver:{driver_id}",
+                    ttl_seconds=self.settings.YANDEX_ORDERS_CACHE_TTL_SECONDS,
+                    stale_seconds=self.settings.YANDEX_CACHE_STALE_SECONDS,
+                    refresh=refresh,
+                )
+            except (YandexApiError, YandexRateLimitError) as exc:
+                # Preserve the former park-wide stale fallback when the exact
+                # driver query hits a temporary upstream failure.
+                temporary = isinstance(exc, YandexRateLimitError) or exc.status_code >= 500
+                if (
+                    temporary
+                    and park_age is not None
+                    and park_age
+                    <= self.settings.YANDEX_ORDERS_CACHE_TTL_SECONDS
+                    + self.settings.YANDEX_CACHE_STALE_SECONDS
+                ):
+                    return park_driver_orders()
+                raise
+
+        return await self._translate(snapshot())
+
     async def list_drivers(self) -> list[dict[str, Any]]:
         profiles = await self._driver_profiles_snapshot()
         result = [
@@ -138,8 +193,51 @@ class YandexFleetProvider(FleetProvider):
         return [driver for driver in result if driver.get("id")]
 
     async def get_driver(self, driver_id: str) -> dict[str, Any] | None:
-        for driver in await self.list_drivers():
-            if str(driver.get("id")) == str(driver_id):
+        driver_id = str(driver_id)
+        # Reuse a fresh park snapshot when the worker has already loaded it.
+        # A cold mobile request only needs one exact driver profile.
+        park_entry = await self.cache.get("drivers:park:default")
+        park_age = (
+            max(0.0, self.cache.clock() - park_entry.updated_at)
+            if park_entry and isinstance(park_entry.payload, list)
+            else None
+        )
+        if park_age is not None and park_age <= self.settings.YANDEX_DRIVER_CACHE_TTL_SECONDS:
+            profiles = park_entry.payload
+        else:
+
+            async def refresh() -> list[dict[str, Any]]:
+                return await self.client.list_driver_profiles(
+                    driver_profile_ids=[driver_id], max_records=1, retry_safe=False
+                )
+
+            async def snapshot() -> list[dict[str, Any]]:
+                try:
+                    return await self.cache.get_or_refresh(
+                        f"drivers:profile:{driver_id}",
+                        ttl_seconds=self.settings.YANDEX_DRIVER_CACHE_TTL_SECONDS,
+                        stale_seconds=self.settings.YANDEX_CACHE_STALE_SECONDS,
+                        refresh=refresh,
+                    )
+                except (YandexApiError, YandexRateLimitError) as exc:
+                    temporary = isinstance(exc, YandexRateLimitError) or exc.status_code >= 500
+                    if (
+                        temporary
+                        and park_age is not None
+                        and park_age
+                        <= self.settings.YANDEX_DRIVER_CACHE_TTL_SECONDS
+                        + self.settings.YANDEX_CACHE_STALE_SECONDS
+                    ):
+                        return park_entry.payload
+                    raise
+
+            profiles = await self._translate(snapshot())
+        for profile in profiles:
+            driver = map_yandex_driver(
+                profile,
+                default_country_code=self.settings.PHONE_DEFAULT_COUNTRY_CODE,
+            )
+            if driver.get("id") == driver_id:
                 return driver
         return None
 
@@ -163,9 +261,13 @@ class YandexFleetProvider(FleetProvider):
 
         # Preserve the existing shared snapshot fast path while it is fresh.
         entry = await self.cache.get("drivers:park:default")
-        if entry and isinstance(entry.payload, list) and (
-            max(0.0, self.cache.clock() - entry.updated_at)
-            <= self.settings.YANDEX_DRIVER_CACHE_TTL_SECONDS
+        if (
+            entry
+            and isinstance(entry.payload, list)
+            and (
+                max(0.0, self.cache.clock() - entry.updated_at)
+                <= self.settings.YANDEX_DRIVER_CACHE_TTL_SECONDS
+            )
         ):
             return match(entry.payload)
 
@@ -173,9 +275,7 @@ class YandexFleetProvider(FleetProvider):
         # every page of the park-wide snapshot during login. Verify the exact
         # normalized phone before authorizing; search results alone are not proof.
         profiles = await self._translate(
-            self.client.list_driver_profiles(
-                search_text=target, max_records=100, retry_safe=False
-            )
+            self.client.list_driver_profiles(search_text=target, max_records=100, retry_safe=False)
         )
         found = match(profiles)
         if found:
@@ -203,9 +303,7 @@ class YandexFleetProvider(FleetProvider):
         return [vehicle for raw in cars if (vehicle := map_yandex_vehicle(raw))]
 
     async def get_vehicle(self, vehicle_id: str) -> dict[str, Any] | None:
-        cars = await self._translate(
-            self.client.list_cars(car_ids=[vehicle_id], max_records=1)
-        )
+        cars = await self._translate(self.client.list_cars(car_ids=[vehicle_id], max_records=1))
         for raw in cars:
             vehicle = map_yandex_vehicle(raw)
             if vehicle and str(vehicle.get("id")) == str(vehicle_id):
@@ -221,7 +319,11 @@ class YandexFleetProvider(FleetProvider):
         date_to: str | None = None,
     ) -> list[dict[str, Any]]:
         if status is None and date_from is None and date_to is None:
-            raw_orders = await self._park_orders_snapshot()
+            raw_orders = (
+                await self._driver_orders_snapshot(str(driver_id))
+                if driver_id
+                else await self._park_orders_snapshot()
+            )
         else:
             booked_from, booked_to = self._date_range(date_from, date_to)
             statuses = INTERNAL_TO_YANDEX_STATUSES.get(status) if status else None
@@ -235,11 +337,7 @@ class YandexFleetProvider(FleetProvider):
             )
         orders = [map_yandex_order(raw) for raw in raw_orders]
         if driver_id:
-            orders = [
-                order
-                for order in orders
-                if str(order.get("driver_id")) == str(driver_id)
-            ]
+            orders = [order for order in orders if str(order.get("driver_id")) == str(driver_id)]
         if status:
             orders = [order for order in orders if order.get("status") == status]
         orders.sort(key=lambda item: item.get("created_at") or "", reverse=True)
