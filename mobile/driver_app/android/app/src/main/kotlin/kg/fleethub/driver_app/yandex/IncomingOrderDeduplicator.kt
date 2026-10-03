@@ -82,4 +82,15 @@ object IncomingOrderDeduplicator {
         entries.remove(eventId)
         store.edit().putString("entries", entries.toString()).commit()
     }
+
+    /** Fill in details learned after the title-only notification was reserved. */
+    @Synchronized fun updateDetails(context: Context, eventId: String, price: String?, pickup: String?) {
+        if (price.isNullOrBlank() && pickup.isNullOrBlank()) return
+        val store = context.getSharedPreferences("incoming_order_dedup", Context.MODE_PRIVATE)
+        val entries = runCatching { JSONObject(store.getString("entries", "{}") ?: "{}") }.getOrDefault(JSONObject())
+        val entry = entries.optJSONObject(eventId) ?: return
+        if (!price.isNullOrBlank()) entry.put("price", price)
+        if (!pickup.isNullOrBlank()) entry.put("pickup", pickup)
+        store.edit().putString("entries", entries.toString()).commit()
+    }
 }

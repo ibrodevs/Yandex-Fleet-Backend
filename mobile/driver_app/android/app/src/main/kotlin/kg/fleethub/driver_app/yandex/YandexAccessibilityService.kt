@@ -9,8 +9,11 @@ import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import org.json.JSONObject
 
-/** Stage 1: observation only. No actions or offer inference before real-tree validation. */
 class YandexAccessibilityService : AccessibilityService() {
+    companion object {
+        @Volatile private var instance: YandexAccessibilityService? = null
+        fun requestCapture() { instance?.scheduleCapture(100) }
+    }
     private val handler = Handler(Looper.getMainLooper())
     private var pending = false
     private var eventType = 0
@@ -20,7 +23,11 @@ class YandexAccessibilityService : AccessibilityService() {
         snapshot()
     }
 
-    override fun onServiceConnected() { YandexDiagnostics.connection(true) }
+    override fun onServiceConnected() {
+        instance = this
+        YandexDiagnostics.connection(true)
+        if (YandexOfferEnrichment.hasPending(this)) scheduleCapture(100)
+    }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event?.packageName?.toString() != YandexDiagnostics.YANDEX_PRO_PACKAGE) return
@@ -28,8 +35,12 @@ class YandexAccessibilityService : AccessibilityService() {
             event.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) return
         eventType = event.eventType
         eventTime = System.currentTimeMillis()
+        scheduleCapture(300)
+    }
+
+    private fun scheduleCapture(delayMs: Long) {
         // A bounded trailing sample: continuous animations cannot postpone capture forever.
-        if (!pending) { pending = true; handler.postDelayed(capture, 300) }
+        if (!pending) { pending = true; handler.postDelayed(capture, delayMs) }
     }
 
     private fun snapshot() {
@@ -37,24 +48,36 @@ class YandexAccessibilityService : AccessibilityService() {
         var count = 0
         var truncated = false
         val dump = StringBuilder()
+        val texts = mutableListOf<String>()
         val root = runCatching { rootInActiveWindow }.getOrNull()
         val isYandex = runCatching { root?.packageName?.toString() == YandexDiagnostics.YANDEX_PRO_PACKAGE }.getOrDefault(false)
-        val collect = YandexDiagnostics.recording && YandexDiagnostics.debugAvailable
+        val debug = YandexDiagnostics.recording && YandexDiagnostics.debugAvailable
+        val enriching = YandexOfferEnrichment.hasPending(this)
+        val collect = debug || enriching
         fun walk(node: AccessibilityNodeInfo, depth: Int) {
             try {
-                if (count >= 500 || depth > 40 || SystemClock.uptimeMillis() - start > 40) { truncated = true; return }
+                if (count >= 500 || depth > 40 || SystemClock.uptimeMillis() - start > 80) { truncated = true; return }
                 count++
                 // Never record passwords or editable fields (including login credentials).
                 if (node.isPassword || node.isEditable) return
-                val bounds = Rect()
-                node.getBoundsInScreen(bounds)
-                dump.append(JSONObject(mapOf(
-                    "depth" to depth, "text" to safeText(node.text),
-                    "contentDescription" to safeText(node.contentDescription),
-                    "viewId" to node.viewIdResourceName, "className" to node.className?.toString(),
-                    "clickable" to node.isClickable, "enabled" to node.isEnabled,
-                    "visible" to node.isVisibleToUser, "bounds" to bounds.toShortString(),
-                ))).append('\n')
+                if (!node.isVisibleToUser) return
+                val text = safeText(node.text)
+                val description = safeText(node.contentDescription)
+                if (enriching) {
+                    text?.let { texts.add(it) }
+                    if (description != text) description?.let { texts.add(it) }
+                }
+                if (debug) {
+                    val bounds = Rect()
+                    node.getBoundsInScreen(bounds)
+                    dump.append(JSONObject(mapOf(
+                        "depth" to depth, "text" to text,
+                        "contentDescription" to description,
+                        "viewId" to node.viewIdResourceName, "className" to node.className?.toString(),
+                        "clickable" to node.isClickable, "enabled" to node.isEnabled,
+                        "visible" to node.isVisibleToUser, "bounds" to bounds.toShortString(),
+                    ))).append('\n')
+                }
                 for (i in 0 until node.childCount.coerceAtMost(500)) {
                     if (truncated) break
                     runCatching { node.getChild(i) }.getOrNull()?.let { child ->
@@ -65,12 +88,13 @@ class YandexAccessibilityService : AccessibilityService() {
         }
         try { if (root != null && isYandex && collect) walk(root, 0) }
         finally { root?.let { recycle(it) } }
+        if (enriching) YandexOfferEnrichment.onSnapshot(this, texts, count, isYandex)
         YandexDiagnostics.record(mapOf(
             "time" to eventTime, "capturedAt" to System.currentTimeMillis(),
             "eventType" to AccessibilityEvent.eventTypeToString(eventType),
             "package" to YandexDiagnostics.YANDEX_PRO_PACKAGE,
             "rootAvailable" to isYandex, "nodes" to count, "truncated" to truncated,
-            "recording" to collect,
+            "recording" to debug,
         ), dump.toString())
     }
 
@@ -88,6 +112,6 @@ class YandexAccessibilityService : AccessibilityService() {
     }
     override fun onDestroy() { stopCapture(); super.onDestroy() }
     private fun stopCapture() {
-        handler.removeCallbacks(capture); pending = false; YandexDiagnostics.connection(false)
+        handler.removeCallbacks(capture); pending = false; instance = null; YandexDiagnostics.connection(false)
     }
 }

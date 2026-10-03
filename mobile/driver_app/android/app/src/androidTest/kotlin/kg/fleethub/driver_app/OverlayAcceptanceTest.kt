@@ -73,6 +73,14 @@ class OverlayAcceptanceTest {
                 .put("driver_id", "test-driver")
             OrderDelivery.deliver(context, offer)
             assertEquals(eventId, OverlayManager.get(context).currentId)
+            val enriched = JSONObject(offer.toString()).put("tariff_title", "Комфорт+")
+                .put("price", "1564").put("currency", "RUB")
+                .put("payment_method", "card").put("duration_minutes", "40")
+                .put("pickup", "ул. Манаса, 45").put("destination", "проспект Чуй, 120")
+            assertTrue(OverlayManager.get(context).update(enriched))
+            assertEquals("The same offer must keep one overlay", eventId, OverlayManager.get(context).currentId)
+            OverlayManager.get(context).hide()
+            assertFalse("Dismissed offer must stay dismissed", OverlayManager.get(context).update(enriched))
         }
     }
     @Test fun testOffDutyNotificationFallback() {

@@ -66,9 +66,11 @@ class YandexNotificationListenerService : NotificationListenerService() {
                 "title=${payload.title.take(300)} text=${payload.text.take(300)} big_text=${payload.bigText.take(300)} sub_text=${payload.subText.take(300)} extras_keys=${extras.keySet().joinToString().take(300)}", id)
             MonitorLog.write(this, "INFO", "ORDER_DETECTOR", "is_order=${result.isOrder} confidence=${result.confidence} source=yandex_notification", id)
             if (!result.isOrder) {
-                if (result.confidence == "medium") MonitorLog.write(this, "DEBUG", "ORDER_DETECTOR", "Potential order detected but not shown", id)
+                if (YandexOfferTracker.isIdleStatus(payload)) YandexOfferEnrichment.clear(this)
+                if (result.confidence == "medium") MonitorLog.write(this, "DEBUG", "ORDER_IGNORED", "reason=insufficient_order_evidence", id)
                 return
             }
+            MonitorLog.write(this, "DEBUG", "ORDER_DETECTED", "source=yandex_notification confidence=${result.confidence}", id)
             val prefs = OverlayPreferences(this)
             val driverId = prefs.store.getString("driver_id", null)
             if (driverId.isNullOrBlank()) {
@@ -82,7 +84,10 @@ class YandexNotificationListenerService : NotificationListenerService() {
                 .put("pickup", result.pickup).put("destination", result.destination).put("tariff_title", JSONObject.NULL)
                 .put("detected_at", System.currentTimeMillis())
             Handler(Looper.getMainLooper()).post {
-                try { OrderDelivery.deliver(this, order) }
+                try {
+                    OrderDelivery.deliver(this, order)
+                    YandexOfferEnrichment.begin(this, order)
+                }
                 catch (e: Exception) { MonitorLog.write(this, "ERROR", "ORDER_DELIVERY", "Delivery failed: ${e.javaClass.simpleName}", id) }
             }
         } catch (e: Exception) {

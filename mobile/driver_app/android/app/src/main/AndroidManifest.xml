@@ -10,7 +10,7 @@
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <service android:name=".yandex.YandexAccessibilityService"
-            android:label="Диагностика Yandex Pro"
+            android:label="Мониторинг заказов Yandex Pro"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
             android:exported="true">
             <intent-filter><action android:name="android.accessibilityservice.AccessibilityService" /></intent-filter>

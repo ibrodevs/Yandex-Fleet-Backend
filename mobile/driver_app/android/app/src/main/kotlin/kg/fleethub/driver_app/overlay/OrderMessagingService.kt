@@ -139,7 +139,7 @@ object OrderDelivery {
                 MonitorLog.write(context, "INFO", "OVERLAY", "Overlay show requested source=$source", eventId, orderId)
                 OverlayManager.get(context).show(order)
                 shown = true
-                MonitorLog.write(context, "INFO", "OVERLAY", "Overlay shown source=$source", eventId, orderId)
+                MonitorLog.write(context, "DEBUG", "OVERLAY_SHOWN", "source=$source", eventId, orderId)
             } catch (e: Exception) {
                 MonitorLog.write(context, "ERROR", "OVERLAY", "Overlay show failed: ${e.javaClass.simpleName} source=$source", eventId, orderId)
             }

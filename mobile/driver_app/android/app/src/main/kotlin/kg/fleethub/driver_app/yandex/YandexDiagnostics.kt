@@ -55,7 +55,7 @@ object YandexDiagnostics {
         "driverLinked" to (context.getSharedPreferences("fleet_overlay", Context.MODE_PRIVATE).getString("driver_id", null) != null),
         "overlay" to statusFlag(context, "overlay") { Settings.canDrawOverlays(context) }, "connected" to connected,
         "debugAvailable" to debugAvailable, "recording" to recording,
-        "lastEvent" to lastEvent, "stage" to "diagnostics_only",
+        "lastEvent" to lastEvent, "stage" to "notification_plus_accessibility",
     )
 
     fun record(metadata: Map<String, Any?>, dump: String) {
