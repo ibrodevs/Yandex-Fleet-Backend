@@ -75,6 +75,8 @@ class Settings(BaseSettings):
     MOBILE_TEST_AUTH_DRIVERS: str = ""
     FIREBASE_PROJECT_ID: str = ""
     FIREBASE_CREDENTIALS_FILE: str = ""
+    FIREBASE_HTTP_TIMEOUT_SECONDS: float = Field(default=10, gt=0, le=30)
+    FIREBASE_CERT_PROXY: str = ""
 
     LOG_LEVEL: str = "INFO"
 

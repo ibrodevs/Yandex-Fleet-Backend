@@ -10,7 +10,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
 from app.config import get_settings
-from app.mobile.firebase import send_push, verify_phone_token
+from app.mobile.firebase import FirebaseVerificationUnavailable, send_push, verify_phone_token
 from app.mobile.storage import database, settings_for
 from app.services.fleet import FleetProviderError, get_fleet_provider
 from app.services.fleet.phone import normalize_phone
@@ -127,6 +127,9 @@ async def login(body: Login):
         )
         if not phone or claims.get("firebase", {}).get("sign_in_provider") != "phone":
             raise ValueError()
+    except FirebaseVerificationUnavailable:
+        log.warning("mobile_login_firebase_certificates_unavailable")
+        raise HTTPException(503, "Проверка Firebase временно недоступна") from None
     except Exception:
         log.info("mobile_login_failed")
         raise HTTPException(401, "Не удалось подтвердить номер") from None

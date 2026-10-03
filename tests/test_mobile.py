@@ -9,6 +9,7 @@ from app.config import Settings, get_settings
 from app.core.exceptions import YandexRateLimitError
 from app.main import app
 from app.mobile import router as mobile
+from app.mobile.firebase import FirebaseVerificationUnavailable
 from app.mobile.storage import database
 from app.mobile.worker import MobileOrderWatcher
 from app.services.fleet.yandex import YandexFleetProvider
@@ -75,6 +76,18 @@ async def test_mobile_auth(client, monkeypatch):
     assert (
         await c.post("/api/v1/mobile/auth/firebase", json={"id_token": "invalid-token"})
     ).status_code == 401
+
+
+async def test_firebase_certificate_failure_is_service_error_not_invalid_code(client, monkeypatch):
+    c, provider = client
+    monkeypatch.setattr(
+        mobile,
+        "verify_phone_token",
+        AsyncMock(side_effect=FirebaseVerificationUnavailable()),
+    )
+    response = await c.post("/api/v1/mobile/auth/firebase", json={"id_token": "firebase-token"})
+    assert response.status_code == 503
+    provider.get_driver_by_phone.assert_not_awaited()
 
 
 async def test_test_login_is_hidden_when_disabled(client):

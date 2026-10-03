@@ -70,6 +70,7 @@ String phoneAuthError(Object error, {required bool backend}) {
       401 => 'Firebase подтвердил номер, но backend отклонил ID token. Проверьте Firebase project на сервере. [Backend: 401]',
       403 => 'Номер подтверждён Firebase, но водитель с таким номером не найден в парке. [Backend: 403]',
       503 => 'Номер подтверждён Firebase, но сервис входа backend временно недоступен. [Backend: 503]',
+      504 => 'Номер подтверждён Firebase, но сервер не успел завершить вход. Повторите вход без нового кода. [Backend: 504]',
       null =>
         error.type == DioExceptionType.badCertificate
             ? 'Номер подтверждён Firebase. Не удалось установить защищённое соединение с сервером. Повторите вход без нового кода.'

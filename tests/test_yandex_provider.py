@@ -8,6 +8,7 @@ import pytest
 from app.config import Settings
 from app.core.exceptions import YandexRateLimitError
 from app.services.fleet.base import FleetProviderError
+from app.services.fleet.phone import normalize_phone
 from app.services.fleet.yandex import YandexFleetProvider
 from app.services.yandex.cache import SharedYandexCache
 from app.services.yandex.client import YandexFleetClient
@@ -21,18 +22,29 @@ class FakeYandexClient:
         self.cars = cars or []
         self.order_calls = []
         self.profile_calls = 0
+        self.search_calls = []
 
     async def list_driver_profiles(
         self,
         *,
         driver_profile_ids=None,
+        search_text=None,
         max_records=None,
         retry_safe=True,
     ):
         self.profile_calls += 1
+        if search_text:
+            self.search_calls.append(search_text)
         items = deepcopy(self.profiles)
         if driver_profile_ids:
             items = [item for item in items if item["driver_profile"]["id"] in driver_profile_ids]
+        if search_text:
+            items = [
+                item for item in items
+                if search_text in {
+                    normalize_phone(phone) for phone in item["driver_profile"].get("phones", [])
+                }
+            ]
         return items[:max_records] if max_records else items
 
     async def list_orders(self, **kwargs):
@@ -92,6 +104,19 @@ async def test_driver_lookup_and_phone_exact_normalized_match(tmp_path):
     assert (await provider.get_driver_by_phone("0555 123 456"))["id"] == "driver-1"
     assert await provider.get_driver_by_phone("+996700000000") is None
     assert client.profile_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_cold_login_searches_exact_phone_without_loading_park_snapshot(tmp_path):
+    client = FakeYandexClient(profiles=[driver_fixture()])
+    provider = YandexFleetProvider(client, settings=settings(tmp_path))
+
+    driver = await provider.get_driver_by_phone("+996555123456")
+
+    assert driver["id"] == "driver-1"
+    assert client.search_calls == ["+996555123456"]
+    assert client.profile_calls == 1
+    assert await provider.cache.get("drivers:park:default") is None
 
 
 @pytest.mark.asyncio

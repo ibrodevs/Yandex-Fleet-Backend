@@ -259,6 +259,7 @@ class YandexFleetClient:
         self,
         *,
         driver_profile_ids: list[str] | None = None,
+        search_text: str | None = None,
         max_records: int | None = None,
         retry_safe: bool = True,
     ) -> list[dict[str, Any]]:
@@ -270,10 +271,13 @@ class YandexFleetClient:
             park: dict[str, Any] = {"id": self._park_id()}
             if driver_profile_ids:
                 park["driver_profile"] = {"id": driver_profile_ids[:100]}
+            query: dict[str, Any] = {"park": park}
+            if search_text:
+                query["text"] = search_text
             payload = await self._request(
                 "POST",
                 DRIVER_PROFILES_PATH,
-                json={"query": {"park": park}, "limit": page_size, "offset": offset},
+                json={"query": query, "limit": page_size, "offset": offset},
                 retry_safe=retry_safe,
             )
             items = payload.get("driver_profiles") or []

@@ -195,7 +195,7 @@ void main() {
       expect(tokens, isEmpty);
     },
   );
-  for (final status in [null, 401, 403, 503]) {
+  for (final status in [null, 401, 403, 503, 504]) {
     test(
       'backend $status preserves verified token for retry without reusing OTP',
       () async {

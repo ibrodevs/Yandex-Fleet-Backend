@@ -70,6 +70,28 @@ async def test_driver_profiles_uses_official_endpoint_headers_and_offset_paginat
 
 
 @pytest.mark.asyncio
+async def test_driver_profile_phone_search_uses_documented_text_filter():
+    bodies = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        bodies.append(json.loads(request.content))
+        return response(request, 200, {"driver_profiles": [], "total": 0})
+
+    http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    client = YandexFleetClient(http, settings=make_settings())
+    try:
+        assert await client.list_driver_profiles(
+            search_text="+996555123456", max_records=100, retry_safe=False
+        ) == []
+    finally:
+        await http.aclose()
+    assert bodies[0]["query"] == {
+        "park": {"id": "test-park"},
+        "text": "+996555123456",
+    }
+
+
+@pytest.mark.asyncio
 async def test_cars_uses_official_endpoint_and_offset_pagination():
     requests: list[httpx.Request] = []
 

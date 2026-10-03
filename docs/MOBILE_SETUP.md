@@ -36,6 +36,8 @@ MOBILE_ORDER_WATCHER_ENABLED=true
 MOBILE_ORDER_POLL_INTERVAL_SECONDS=10
 FIREBASE_PROJECT_ID=your-project
 FIREBASE_CREDENTIALS_FILE=/absolute/private/path/firebase-admin.json
+FIREBASE_HTTP_TIMEOUT_SECONDS=10
+FIREBASE_CERT_PROXY=http://proxy.server:3128
 ```
 
 `SECRET_KEY` должен быть случайным, минимум 32 символа: `python -c 'import secrets; print(secrets.token_urlsafe(48))'`. Не меняйте существующий production SECRET_KEY без плана завершения старых сессий. Все web/worker процессы должны использовать одинаковые параметры и абсолютные пути к `mobile.sqlite3` и `yandex_cache.sqlite3`. SQLite автоматически создаёт мобильные таблицы и общий кэш при первом обращении. Файлы храните в приватном каталоге с резервным копированием. Подходит для одного узла PythonAnywhere, не для нескольких независимых серверов.
@@ -43,6 +45,10 @@ FIREBASE_CREDENTIALS_FILE=/absolute/private/path/firebase-admin.json
 Web и единственный worker читают общий SQLite-кэш Yandex Fleet. Полный снимок водителей обновляется не чаще одного раза в 60 секунд, а снимок заказов всего парка — не чаще одного раза в 10 секунд; фильтрация заказов конкретного водителя выполняется локально. Межпроцессный lock и повторная проверка кэша не позволяют web и worker одновременно обновлять один снимок. При `429`, `5xx`, timeout или сетевой ошибке разрешена выдача последнего снимка ещё максимум 60 секунд после TTL. Ошибки `401/403` кэшем не скрываются. Источником истины остаётся Yandex Fleet, кэш только ограничивает частоту чтения; polling выполняет только отдельный worker.
 
 Перезапустите web app после установки зависимостей. Web startup не обращается к Firebase и не запускает watcher. Отсутствие Firebase не ломает Telegram и `/health/ready`. Мобильный login возвращает 503 до настройки Firebase.
+
+На PythonAnywhere `FIREBASE_CERT_PROXY` направляет только запрос Firebase Admin за публичными сертификатами Google через внутренний HTTP proxy. Это не меняет маршрут Yandex API. Для других хостингов оставьте параметр пустым, если исходящий HTTPS к `www.googleapis.com` работает напрямую. Если сертификаты Google недоступны, вход возвращает 503 за ограниченное время, а не зависает до gateway 504; проверьте `mobile_login_firebase_certificates_unavailable` в server log. `/health/ready` не проверяет получение сертификатов Firebase и потому может показывать `ready` при проблеме входа.
+
+После обновления кода на сервере проверьте тот же транспорт, которым backend проверяет токены: `python -m scripts.check_firebase_certificates`. Команда показывает только HTTP-статус, число публичных ключей и время запроса; токены и содержимое сертификатов не выводятся. Успех этой проверки и повторный вход реального водителя нужны для подтверждения исправления на production.
 
 ### Отдельный worker на PythonAnywhere
 

@@ -150,6 +150,38 @@ class YandexFleetProvider(FleetProvider):
         )
         if not target:
             return None
+
+        def match(profiles: list[dict[str, Any]]) -> dict[str, Any] | None:
+            for profile in profiles:
+                driver = map_yandex_driver(
+                    profile,
+                    default_country_code=self.settings.PHONE_DEFAULT_COUNTRY_CODE,
+                )
+                if driver.get("id") and target in set(driver.get("phones") or []):
+                    return driver
+            return None
+
+        # Preserve the existing shared snapshot fast path while it is fresh.
+        entry = await self.cache.get("drivers:park:default")
+        if entry and isinstance(entry.payload, list) and (
+            max(0.0, self.cache.clock() - entry.updated_at)
+            <= self.settings.YANDEX_DRIVER_CACHE_TTL_SECONDS
+        ):
+            return match(entry.payload)
+
+        # Yandex's documented text query accepts a phone and avoids waiting for
+        # every page of the park-wide snapshot during login. Verify the exact
+        # normalized phone before authorizing; search results alone are not proof.
+        profiles = await self._translate(
+            self.client.list_driver_profiles(
+                search_text=target, max_records=100, retry_safe=False
+            )
+        )
+        found = match(profiles)
+        if found:
+            return found
+        # Keep the original full lookup for parks where text search does not
+        # return a phone or the number is absent.
         for driver in await self.list_drivers():
             if target in set(driver.get("phones") or []):
                 return driver
