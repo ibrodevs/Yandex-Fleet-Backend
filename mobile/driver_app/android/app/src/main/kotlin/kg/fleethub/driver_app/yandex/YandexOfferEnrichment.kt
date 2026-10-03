@@ -106,7 +106,15 @@ object YandexOfferEnrichment {
             }
         }
         if (changed || now - lastParseLogAt > 1_000) {
-            MonitorLog.write(context, "DEBUG", "ORDER_PARSED", "fields=${details.fieldNames()} changed=$changed", id)
+            val missing = listOfNotNull(
+                if (details.price == null) "price" else null,
+                if (details.payment == null) "payment" else null,
+                if (details.durationMinutes == null) "duration" else null,
+                if (details.pickup == null) "pickup" else null,
+                if (details.destination == null) "destination" else null,
+            ).joinToString(",").ifBlank { "none" }
+            MonitorLog.write(context, "DEBUG", "ORDER_PARSED",
+                "fields=${details.fieldNames()} missing=$missing changed=$changed price_candidates=${details.priceCandidates} route_labels=${details.routeLabels}", id)
             lastParseLogAt = now
         }
         if (!changed) return

@@ -27,7 +27,6 @@ class OverlayManager private constructor(private val context: Context) {
     private val handler = Handler(Looper.getMainLooper())
     private var view: View? = null
     private var body: LinearLayout? = null
-    private var currentOrder: JSONObject? = null
     var currentId: String? = null
         private set
 
@@ -38,7 +37,6 @@ class OverlayManager private constructor(private val context: Context) {
         view?.let { runCatching { windows.removeView(it) } }
         view = null
         body = null
-        currentOrder = null
         currentId = null
     }
 
@@ -47,7 +45,6 @@ class OverlayManager private constructor(private val context: Context) {
         val id = OrderDelivery.value(order, "order_id") ?: OrderDelivery.value(order, "event_id")
         val container = body ?: return false
         if (id == null || id != currentId || view == null) return false
-        currentOrder = order
         render(container, order, OverlayPreferences(context).settings)
         scheduleAutoHide(order)
         return true
@@ -55,6 +52,7 @@ class OverlayManager private constructor(private val context: Context) {
 
     private fun render(container: LinearLayout, order: JSONObject, settings: JSONObject) {
         container.removeAllViews()
+        val localOffer = order.optString("source") == "yandex_notification"
         fun label(text: String, size: Float = 16f, color: Int = Color.WHITE) {
             container.addView(TextView(context).apply {
                 this.text = text
@@ -69,7 +67,9 @@ class OverlayManager private constructor(private val context: Context) {
         }
         OrderDelivery.value(order, "order_type")?.let { label("Тип: $it", 14f, Color.LTGRAY) }
         if (settings.optBoolean("show_distance", true)) {
-            OrderDelivery.value(order, "duration_minutes")?.let { label("Время: ~$it мин", 14f, Color.LTGRAY) }
+            val duration = OrderDelivery.value(order, "duration_minutes")
+            if (duration != null) label("Время: ~$duration мин", 14f, Color.LTGRAY)
+            else if (localOffer) label("Время: уточняется", 14f, Color.LTGRAY)
             OrderDelivery.value(order, "distance_km")?.let { label("Расстояние: $it км", 14f, Color.LTGRAY) }
         }
         if (settings.optBoolean("show_price", true)) {
@@ -81,15 +81,23 @@ class OverlayManager private constructor(private val context: Context) {
                 }
                 label("Цена: $price $currency".trim(), 23f)
             }
+            if (localOffer && OrderDelivery.value(order, "price") == null)
+                label("Цена: уточняется", 16f, Color.LTGRAY)
         }
         OrderDelivery.value(order, "payment_method")?.let { payment ->
             label("Оплата: ${when (payment) { "card" -> "безнал"; "cash" -> "наличные"; else -> payment }}", 14f, Color.LTGRAY)
         }
+        if (localOffer && OrderDelivery.value(order, "payment_method") == null)
+            label("Оплата: уточняется", 14f, Color.LTGRAY)
         if (settings.optBoolean("show_address", true)) {
-            OrderDelivery.value(order, "pickup")?.let { label("Откуда: $it") }
-            OrderDelivery.value(order, "destination")?.let { label("Куда: $it") }
+            val pickup = OrderDelivery.value(order, "pickup")
+            if (pickup != null) label("Откуда: $pickup")
+            else if (localOffer) label("Откуда: уточняется", 14f, Color.LTGRAY)
+            val destination = OrderDelivery.value(order, "destination")
+            if (destination != null) label("Куда: $destination")
+            else if (localOffer) label("Куда: уточняется", 14f, Color.LTGRAY)
         }
-        if (listOf("tariff_title", "order_type", "price", "pickup", "destination", "duration_minutes")
+        if (!localOffer && listOf("tariff_title", "order_type", "price", "pickup", "destination", "duration_minutes")
                 .all { OrderDelivery.value(order, it) == null }) {
             label("Откройте Яндекс Про для деталей заказа", 16f, Color.LTGRAY)
         }
@@ -100,9 +108,10 @@ class OverlayManager private constructor(private val context: Context) {
         val settings = OverlayPreferences(context).settings
         if (!settings.optBoolean("auto_hide", true)) return
         val configured = settings.optInt("display_seconds", 15).coerceIn(5, 30)
-        val titleOnlyLocal = order.optString("source") == "yandex_notification" &&
-            listOf("tariff_title", "price", "pickup", "destination").all { OrderDelivery.value(order, it) == null }
-        val seconds = if (titleOnlyLocal) maxOf(configured, 30) else configured
+        val incompleteLocal = order.optString("source") == "yandex_notification" &&
+            listOf("price", "payment_method", "pickup", "destination")
+                .any { OrderDelivery.value(order, it) == null }
+        val seconds = if (incompleteLocal) maxOf(configured, 30) else configured
         handler.postDelayed({ hide() }, seconds * 1000L)
     }
 
@@ -131,17 +140,8 @@ class OverlayManager private constructor(private val context: Context) {
         val content = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
         root.addView(content)
         render(content, order, settings)
-        val buttons = LinearLayout(context)
-        buttons.addView(Button(context).apply {
-            text = "Открыть"
-            setOnClickListener {
-                context.startActivity(OrderDelivery.openIntent(context, currentOrder ?: order))
-                hide()
-            }
-        }, LinearLayout.LayoutParams(0, dp(50), 1f))
-        buttons.addView(Button(context).apply { text = "Закрыть"; setOnClickListener { hide() } },
-            LinearLayout.LayoutParams(0, dp(50), 1f))
-        root.addView(buttons)
+        root.addView(Button(context).apply { text = "Закрыть"; setOnClickListener { hide() } },
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(50)))
         val width = minOf(dp(350), context.resources.displayMetrics.widthPixels - dp(24))
         val params = WindowManager.LayoutParams(width, WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
@@ -175,7 +175,6 @@ class OverlayManager private constructor(private val context: Context) {
         windows.addView(root, params)
         view = root
         body = content
-        currentOrder = order
         currentId = OrderDelivery.value(order, "order_id") ?: OrderDelivery.value(order, "event_id")
         scheduleAutoHide(order)
     }

@@ -15,7 +15,7 @@ class YandexCardParserTest {
     @Test fun parsesVisibleLabeledCard() {
         val card = YandexCardParser.parse(listOf(
             "Новый заказ", "Тариф", "Комфорт+", "Тип заказа: Поездка",
-            "Время в пути", "~40 мин", "1\u00a0564 ₽", "Оплата: безнал",
+            "Время в пути", "~40 мин", "Цена: 1\u00a0564 ₽", "Оплата: безнал",
             "Откуда", "ул. Манаса, 45", "Куда", "проспект Чуй, 120",
             "Принять",
         ))
@@ -47,5 +47,57 @@ class YandexCardParserTest {
         val offer = YandexCardParser.parse(listOf("Новый заказ", "ул. Манаса, 45", "40 мин до клиента"))
         assertNull(offer.pickup)
         assertNull(offer.durationMinutes)
+    }
+
+    @Test fun selectsTripPriceAndTimeInsteadOfFirstUnrelatedNumbers() {
+        val card = YandexCardParser.parse(listOf(
+            "Новый заказ", "Комфорт+", "6 мин", "Ваш доход 322 ₽",
+            "Стоимость поездки", "750 ₽", "Время в пути", "~40 мин",
+            "Способ оплаты", "Картой", "Откуда", "А", "ул. Манаса, 45",
+            "Куда", "Б", "проспект Чуй, 120", "Принять заказ",
+        ))
+        assertEquals("750", card.price)
+        assertEquals("40", card.durationMinutes)
+        assertEquals("card", card.payment)
+        assertEquals("ул. Манаса, 45", card.pickup)
+        assertEquals("проспект Чуй, 120", card.destination)
+        assertEquals(2, card.priceCandidates)
+    }
+
+    @Test fun hidesUnlabeledAmountAndPickupEtaRatherThanShowingWrongFare() {
+        val card = YandexCardParser.parse(listOf("Новый заказ", "6 мин", "322 ₽", "Комфорт+"))
+        assertNull(card.price)
+        assertNull(card.durationMinutes)
+        assertEquals("Комфорт+", card.tariff)
+    }
+
+    @Test fun readsOfferCardAddressesAfterRepeatedMapMarkers() {
+        val card = YandexCardParser.parse(listOf(
+            "Пропустить", "Приоритет -1", "А", "Б",
+            "3,9 км · 6 мин", "Средняя подача", "Комфорт+",
+            "А", "А", "улица Новгородцевой, 3",
+            "Б", "Б", "Автолига, Водительский пр., 20, Екатеринбург",
+            "Пассажир", "4.97", "+100 ₽",
+        ))
+        assertTrue(card.offerVisible)
+        assertEquals("Комфорт+", card.tariff)
+        assertEquals("улица Новгородцевой, 3", card.pickup)
+        assertEquals("Автолига, Водительский пр., 20, Екатеринбург", card.destination)
+        assertNull(card.price)
+        assertNull(card.payment)
+        assertNull(card.durationMinutes)
+    }
+
+    @Test fun cardRemainsRecognizableWhenSkipButtonIsAbsentFromAccessibilityTree() {
+        val card = YandexCardParser.parse(listOf(
+            "3,9 км · 6 мин", "Средняя подача", "Комфорт+",
+            "А", "улица Новгородцевой, 3",
+            "Б", "Автолига, Водительский пр., 20, Екатеринбург",
+            "+100 ₽",
+        ))
+        assertTrue(card.offerVisible)
+        assertEquals("улица Новгородцевой, 3", card.pickup)
+        assertEquals("Автолига, Водительский пр., 20, Екатеринбург", card.destination)
+        assertNull(card.price)
     }
 }
