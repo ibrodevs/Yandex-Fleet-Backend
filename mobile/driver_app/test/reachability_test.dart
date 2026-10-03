@@ -192,6 +192,32 @@ void main() {
     );
   }
 
+  test('Firebase exchange waits for slow driver lookup and retries a lost connection', () async {
+    final login = api.login('firebase-id-token');
+    await requests.waitFor(1);
+    expect(
+      requests.pending['/auth/firebase']!.$1.receiveTimeout,
+      const Duration(seconds: 75),
+    );
+    requests.fail('/auth/firebase', type: DioExceptionType.connectionError);
+    await requests.waitFor(2);
+    requests.success('/auth/firebase', {'access_token': 'mobile-jwt'});
+    await login;
+    expect(api.token, 'mobile-jwt');
+    expect(api.backendUnavailable, isFalse);
+    expect(requests.paths, ['/auth/firebase', '/auth/firebase']);
+  });
+
+  test('Firebase exchange does not retry rejected credentials', () async {
+    final login = api.login('firebase-id-token');
+    final assertion = expectLater(login, throwsA(isA<DioException>()));
+    await requests.waitFor(1);
+    requests.fail('/auth/firebase', status: 401);
+    await assertion;
+    expect(requests.paths, ['/auth/firebase']);
+    expect(api.backendUnavailable, isFalse);
+  });
+
   test('HTTP 503 clears offline and surfaces service error despite cached settings', () async {
     await offline();
     final refresh = state.refresh();
@@ -328,7 +354,6 @@ void main() {
     DioExceptionType.connectionTimeout,
     DioExceptionType.sendTimeout,
     DioExceptionType.receiveTimeout,
-    DioExceptionType.badCertificate,
     DioExceptionType.unknown,
   ]) {
     test('$type without response uses cache and marks offline', () async {
@@ -339,6 +364,18 @@ void main() {
       expect(api.offline, isTrue);
     });
   }
+
+  test(
+    'certificate failure is surfaced instead of presenting cached data',
+    () async {
+      final get = api.get('/settings');
+      final assertion = expectLater(get, throwsA(isA<DioException>()));
+      await requests.waitFor(1);
+      requests.fail('/settings', type: DioExceptionType.badCertificate);
+      await assertion;
+      expect(api.backendUnavailable, isFalse);
+    },
+  );
 
   test('transport error without cache is surfaced', () async {
     final get = api.get('/uncached');

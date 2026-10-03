@@ -28,11 +28,23 @@ class AppState extends ChangeNotifier {
   final List<StreamSubscription<dynamic>> _subscriptions = [];
   void Function(String)? openOrder;
   Future<void>? _refreshTask;
+  Timer? _retryTimer;
   AppState(this.api, this.firebaseReady) {
     api.addListener(_onReachabilityChanged);
   }
 
-  void _onReachabilityChanged() => notifyListeners();
+  void _onReachabilityChanged() {
+    if (api.backendUnavailable && signedIn) {
+      _retryTimer ??= Timer.periodic(const Duration(seconds: 30), (_) {
+        if (signedIn && api.backendUnavailable) unawaited(refresh());
+      });
+    } else {
+      _retryTimer?.cancel();
+      _retryTimer = null;
+    }
+    notifyListeners();
+  }
+
   bool get signedIn => api.token != null;
   Future<void> init() async {
     api.onUnauthorized = () {
@@ -49,7 +61,7 @@ class AppState extends ChangeNotifier {
     _subscriptions.add(
       Connectivity().onConnectivityChanged.listen((result) {
         if (signedIn &&
-            api.offline &&
+            api.backendUnavailable &&
             !result.contains(ConnectivityResult.none)) {
           refresh();
         }
@@ -276,6 +288,7 @@ class AppState extends ChangeNotifier {
 
   @override
   void dispose() {
+    _retryTimer?.cancel();
     api.removeListener(_onReachabilityChanged);
     for (final s in _subscriptions) {
       s.cancel();

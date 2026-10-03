@@ -10,7 +10,10 @@ class FleetApi extends ChangeNotifier {
   final Dio _dio;
   String? token;
   bool _offline = false;
+  // This means requests could not reach this backend; it does not prove that
+  // the phone has no internet connection.
   bool get offline => _offline;
+  bool get backendUnavailable => _offline;
   int _pendingRequests = 0;
   bool _waveHasResponse = false;
   bool _waveHasTransportFailure = false;
@@ -57,6 +60,7 @@ class FleetApi extends ChangeNotifier {
       error.response == null &&
       error.type != DioExceptionType.cancel &&
       error.type != DioExceptionType.badResponse &&
+      error.type != DioExceptionType.badCertificate &&
       (error.type != DioExceptionType.unknown ||
           error.error == null ||
           error.error is IOException);
@@ -119,7 +123,29 @@ class FleetApi extends ChangeNotifier {
   }
 
   Future<void> login(String idToken) async {
-    final response = await post('/auth/firebase', data: {'id_token': idToken});
+    Future<Response<dynamic>> exchange() => _request(
+      'POST',
+      '/auth/firebase',
+      () => _dio.post(
+        '/auth/firebase',
+        data: {'id_token': idToken},
+        // Driver lookup can wait for three 15-second Yandex attempts plus
+        // backoff. The normal 25-second timeout interrupted valid logins.
+        options: Options(receiveTimeout: const Duration(seconds: 75)),
+      ),
+    );
+    late final Response<dynamic> response;
+    try {
+      response = await exchange();
+    } on DioException catch (error) {
+      if (error.response != null ||
+          (error.type != DioExceptionType.connectionError &&
+              error.type != DioExceptionType.connectionTimeout)) {
+        rethrow;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      response = await exchange();
+    }
     final accessToken = response.data['access_token'] as String;
     await storage.write(key: 'jwt', value: accessToken);
     token = accessToken;
@@ -156,20 +182,25 @@ class FleetApi extends ChangeNotifier {
   Future<void> clear() async {
     token = null;
     await storage.deleteAll();
+    _setOffline(false);
   }
 }
 
 String errorMessage(Object error) {
   if (error is DioException) {
+    if (error.response == null) {
+      return error.type == DioExceptionType.badCertificate
+          ? 'Не удалось установить защищённое соединение с сервером.'
+          : 'Не удалось связаться с сервером. Попробуйте ещё раз.';
+    }
     return switch (error.response?.statusCode) {
       401 => 'Сессия истекла. Войдите снова.',
       403 => 'Номер не найден в парке. Обратитесь к диспетчеру.',
       404 => 'Данные не найдены.',
       429 => 'Слишком много запросов. Попробуйте позже.',
-      500 || 502 => 'Ошибка сервера. Попробуйте ещё раз позже.',
+      500 || 502 || 504 => 'Ошибка сервера. Попробуйте ещё раз позже.',
       503 => 'Данные Яндекс или сервис входа временно недоступны.',
-      _ =>
-        'Не удалось получить данные. Проверьте интернет и попробуйте ещё раз.',
+      _ => 'Не удалось получить данные с сервера. Попробуйте ещё раз.',
     };
   }
   return 'Не удалось выполнить действие. Попробуйте ещё раз.';

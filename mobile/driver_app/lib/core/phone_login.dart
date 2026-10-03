@@ -70,7 +70,12 @@ String phoneAuthError(Object error, {required bool backend}) {
       401 => 'Firebase подтвердил номер, но backend отклонил ID token. Проверьте Firebase project на сервере. [Backend: 401]',
       403 => 'Номер подтверждён Firebase, но водитель с таким номером не найден в парке. [Backend: 403]',
       503 => 'Номер подтверждён Firebase, но сервис входа backend временно недоступен. [Backend: 503]',
-      null => 'Номер подтверждён Firebase. Нет связи с backend — повторите вход без нового кода.',
+      null =>
+        error.type == DioExceptionType.badCertificate
+            ? 'Номер подтверждён Firebase. Не удалось установить защищённое соединение с сервером. Повторите вход без нового кода.'
+            : error.type == DioExceptionType.receiveTimeout
+            ? 'Номер подтверждён Firebase. Сервер слишком долго отвечает. Повторите вход без нового кода.'
+            : 'Номер подтверждён Firebase. Не удалось связаться с сервером. Повторите вход без нового кода.',
       _ =>
         'Номер подтверждён Firebase. Ошибка backend: HTTP ${error.response?.statusCode}.',
     };
@@ -238,7 +243,7 @@ class PhoneLoginController extends ChangeNotifier {
             403 => 'Водитель с этим номером не найден в парке.',
             404 => 'Тестовый вход отключён на backend.',
             503 => 'Backend или Яндекс временно недоступен.',
-            null => 'Нет связи с backend. Проверьте интернет и повторите вход.',
+            null => 'Не удалось связаться с сервером. Повторите вход.',
             _ => 'Ошибка backend: HTTP $status.',
           };
         } else {

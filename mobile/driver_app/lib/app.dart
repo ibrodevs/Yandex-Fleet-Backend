@@ -388,12 +388,14 @@ class _DashboardState extends State<Dashboard> with WidgetsBindingObserver {
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(20, 14, 20, 28),
           children: [
-            if (s.api.offline)
+            if (s.api.backendUnavailable)
               const Card(
                 child: ListTile(
-                  leading: Icon(Icons.wifi_off),
-                  title: Text('Нет подключения'),
-                  subtitle: Text('Показаны последние сохранённые данные'),
+                  leading: Icon(Icons.cloud_off_outlined),
+                  title: Text('Нет связи с сервером'),
+                  subtitle: Text(
+                    'Показаны последние сохранённые данные. Подключение повторится автоматически.',
+                  ),
                 ),
               ),
             if (s.error != null)

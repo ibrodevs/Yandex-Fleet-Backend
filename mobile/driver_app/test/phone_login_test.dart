@@ -223,6 +223,16 @@ void main() {
       },
     );
   }
+  test('backend timeout explains slow server without blaming internet', () {
+    final failure = DioException(
+      requestOptions: RequestOptions(path: '/auth/firebase'),
+      type: DioExceptionType.receiveTimeout,
+    );
+    final message = phoneAuthError(failure, backend: true);
+    expect(message, contains('Сервер слишком долго отвечает'));
+    expect(message, isNot(contains('интернет')));
+    expect(message, contains('без нового кода'));
+  });
   test('invalid code length never starts Firebase sign-in', () async {
     await readyForCode();
     await login.submitCode('123');
