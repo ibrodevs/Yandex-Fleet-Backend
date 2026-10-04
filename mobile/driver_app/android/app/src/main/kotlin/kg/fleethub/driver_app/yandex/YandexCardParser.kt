@@ -9,6 +9,7 @@ data class YandexCardDetails(
     val currency: String? = null,
     val payment: String? = null,
     val durationMinutes: String? = null,
+    val pickupEtaMinutes: String? = null,
     val pickup: String? = null,
     val destination: String? = null,
     val priceCandidates: Int = 0,
@@ -17,6 +18,7 @@ data class YandexCardDetails(
     fun fieldNames(): String = listOfNotNull(
         tariff?.let { "tariff" }, orderType?.let { "type" }, price?.let { "price" },
         payment?.let { "payment" }, durationMinutes?.let { "duration" },
+        pickupEtaMinutes?.let { "pickup_eta" },
         pickup?.let { "pickup" }, destination?.let { "destination" },
     ).joinToString(",").ifBlank { "none" }
 }
@@ -28,6 +30,7 @@ object YandexCardParser {
     private val priceLabel = Regex("^(?:цена(?:\\s+(?:поездки|заказа))?|стоимость(?:\\s+(?:поездки|заказа))?|итого|к оплате|сумма заказа|пассажир заплатит)\\s*[:：-]?\\s*(.*)$", RegexOption.IGNORE_CASE)
     private val unrelatedMoney = Regex("(?:доход|заработ|комисс|бонус|скидк|баланс|парк)", RegexOption.IGNORE_CASE)
     private val minutes = Regex("(?:~|≈)?\\s*(\\d{1,3})\\s*мин(?:ут[аы]?)?\\b", RegexOption.IGNORE_CASE)
+    private val pickupEta = Regex("\\d+(?:[.,]\\d+)?\\s*км\\s*[·•]\\s*(\\d{1,3})\\s*мин(?:ут[аы]?)?\\b", RegexOption.IGNORE_CASE)
     private val tariffName = Regex("^(?:эконом|комфорт\\+?|бизнес|премиум|детский|минивэн|грузовой)$", RegexOption.IGNORE_CASE)
     private val paymentName = Regex("^(?:безнал(?:ичный(?: расч[её]т)?)?|картой|карта|наличные|наличными|cash|card)$", RegexOption.IGNORE_CASE)
     private val typeName = Regex("^(?:поездка|доставка|курьер|грузовой заказ)$", RegexOption.IGNORE_CASE)
@@ -120,6 +123,12 @@ object YandexCardParser {
         val duration = labeled(durationLabel, { minutes.containsMatchIn(it) },
             { minutes.containsMatchIn(it) && !it.contains("до клиента", true) }, 2)
             ?.let { minutes.find(it)?.groupValues?.get(1) }
+        val pickupEtaMinutes = texts.withIndex().firstNotNullOfOrNull { (index, text) ->
+            val estimate = pickupEta.find(text) ?: return@firstNotNullOfOrNull null
+            val pickupContext = (index + 1..minOf(index + 3, texts.lastIndex))
+                .any { texts[it].contains("подача", true) }
+            if (pickupContext) estimate.groupValues[1] else null
+        }
         return YandexCardDetails(
             offerVisible = true,
             tariff = labeled(tariffLabel, { it.isNotBlank() && it.length < 50 }, { tariffName.matches(it) })
@@ -134,6 +143,7 @@ object YandexCardParser {
                 else -> payment
             },
             durationMinutes = duration,
+            pickupEtaMinutes = pickupEtaMinutes,
             pickup = labeled(pickupLabel, ::address, ::address, 2) ?: markerRoute?.first,
             destination = labeled(destinationLabel, ::address, ::address, 2) ?: markerRoute?.second,
             priceCandidates = texts.sumOf { price.findAll(it).count() },

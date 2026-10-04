@@ -67,9 +67,12 @@ class OverlayManager private constructor(private val context: Context) {
         }
         OrderDelivery.value(order, "order_type")?.let { label("Тип: $it", 14f, Color.LTGRAY) }
         if (settings.optBoolean("show_distance", true)) {
+            if (localOffer) OrderDelivery.value(order, "pickup_eta_minutes")?.let {
+                label("Подача: ~$it мин", 14f, Color.LTGRAY)
+            }
             val duration = OrderDelivery.value(order, "duration_minutes")
-            if (duration != null) label("Время: ~$duration мин", 14f, Color.LTGRAY)
-            else if (localOffer) label("Время: уточняется", 14f, Color.LTGRAY)
+            if (duration != null) label(if (localOffer) "Время поездки: ~$duration мин" else "Время: ~$duration мин", 14f, Color.LTGRAY)
+            else if (localOffer) label("Время поездки: нет в предложении", 14f, Color.LTGRAY)
             OrderDelivery.value(order, "distance_km")?.let { label("Расстояние: $it км", 14f, Color.LTGRAY) }
         }
         if (settings.optBoolean("show_price", true)) {
@@ -82,13 +85,13 @@ class OverlayManager private constructor(private val context: Context) {
                 label("Цена: $price $currency".trim(), 23f)
             }
             if (localOffer && OrderDelivery.value(order, "price") == null)
-                label("Цена: уточняется", 16f, Color.LTGRAY)
+                label("Цена: нет в предложении", 16f, Color.LTGRAY)
         }
         OrderDelivery.value(order, "payment_method")?.let { payment ->
             label("Оплата: ${when (payment) { "card" -> "безнал"; "cash" -> "наличные"; else -> payment }}", 14f, Color.LTGRAY)
         }
         if (localOffer && OrderDelivery.value(order, "payment_method") == null)
-            label("Оплата: уточняется", 14f, Color.LTGRAY)
+            label("Оплата: нет в предложении", 14f, Color.LTGRAY)
         if (settings.optBoolean("show_address", true)) {
             val pickup = OrderDelivery.value(order, "pickup")
             if (pickup != null) label("Откуда: $pickup")

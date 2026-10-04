@@ -95,6 +95,7 @@ object YandexOfferEnrichment {
             "currency" to details.currency,
             "payment_method" to details.payment,
             "duration_minutes" to details.durationMinutes,
+            "pickup_eta_minutes" to details.pickupEtaMinutes,
             "pickup" to details.pickup,
             "destination" to details.destination,
         )
@@ -110,6 +111,7 @@ object YandexOfferEnrichment {
                 if (details.price == null) "price" else null,
                 if (details.payment == null) "payment" else null,
                 if (details.durationMinutes == null) "duration" else null,
+                if (details.pickupEtaMinutes == null) "pickup_eta" else null,
                 if (details.pickup == null) "pickup" else null,
                 if (details.destination == null) "destination" else null,
             ).joinToString(",").ifBlank { "none" }

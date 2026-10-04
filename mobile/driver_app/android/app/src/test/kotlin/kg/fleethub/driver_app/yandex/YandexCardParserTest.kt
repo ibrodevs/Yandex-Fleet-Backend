@@ -86,6 +86,7 @@ class YandexCardParserTest {
         assertNull(card.price)
         assertNull(card.payment)
         assertNull(card.durationMinutes)
+        assertEquals("6", card.pickupEtaMinutes)
     }
 
     @Test fun cardRemainsRecognizableWhenSkipButtonIsAbsentFromAccessibilityTree() {
@@ -99,5 +100,21 @@ class YandexCardParserTest {
         assertEquals("улица Новгородцевой, 3", card.pickup)
         assertEquals("Автолига, Водительский пр., 20, Екатеринбург", card.destination)
         assertNull(card.price)
+        assertEquals("6", card.pickupEtaMinutes)
+    }
+
+    @Test fun separatesPickupEtaFromRideTimeOnCurrentOfferCard() {
+        val card = YandexCardParser.parse(listOf(
+            "Пропустить", "1,9 км · 5 мин", "Ближняя подача", "Комфорт",
+            "А", "улица Блюхера, 15, подъезд 2",
+            "Б", "улица Куйбышева, 21", "Пассажир", "+130 ₽",
+        ))
+        assertTrue(card.offerVisible)
+        assertEquals("5", card.pickupEtaMinutes)
+        assertNull(card.durationMinutes)
+        assertNull(card.price)
+        assertNull(card.payment)
+        assertEquals("улица Блюхера, 15, подъезд 2", card.pickup)
+        assertEquals("улица Куйбышева, 21", card.destination)
     }
 }
