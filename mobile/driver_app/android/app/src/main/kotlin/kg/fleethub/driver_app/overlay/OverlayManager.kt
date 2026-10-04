@@ -15,6 +15,11 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import org.json.JSONObject
+import kg.fleethub.driver_app.yandex.YandexAccessibilityService
+import kg.fleethub.driver_app.yandex.YandexActionController
+import kg.fleethub.driver_app.yandex.YandexActionPolicy
+import kg.fleethub.driver_app.yandex.YandexStage
+import kg.fleethub.driver_app.yandex.MonitorLog
 
 class OverlayManager private constructor(private val context: Context) {
     companion object {
@@ -27,6 +32,12 @@ class OverlayManager private constructor(private val context: Context) {
     private val handler = Handler(Looper.getMainLooper())
     private var view: View? = null
     private var body: LinearLayout? = null
+    private var actionButton: Button? = null
+    private var openButton: Button? = null
+    private var actionMessage: TextView? = null
+    private var headerText: TextView? = null
+    private var currentOrder: JSONObject? = null
+    private var actionStage = YandexStage.INCOMING
     var currentId: String? = null
         private set
 
@@ -34,9 +45,15 @@ class OverlayManager private constructor(private val context: Context) {
 
     fun hide() {
         handler.removeCallbacksAndMessages(null)
+        YandexActionController.stop(currentId)
         view?.let { runCatching { windows.removeView(it) } }
         view = null
         body = null
+        actionButton = null
+        openButton = null
+        actionMessage = null
+        headerText = null
+        currentOrder = null
         currentId = null
     }
 
@@ -45,6 +62,7 @@ class OverlayManager private constructor(private val context: Context) {
         val id = OrderDelivery.value(order, "order_id") ?: OrderDelivery.value(order, "event_id")
         val container = body ?: return false
         if (id == null || id != currentId || view == null) return false
+        currentOrder = order
         render(container, order, OverlayPreferences(context).settings)
         scheduleAutoHide(order)
         return true
@@ -74,6 +92,9 @@ class OverlayManager private constructor(private val context: Context) {
             if (duration != null) label(if (localOffer) "Время поездки: ~$duration мин" else "Время: ~$duration мин", 14f, Color.LTGRAY)
             else if (localOffer) label("Время поездки: нет в предложении", 14f, Color.LTGRAY)
             OrderDelivery.value(order, "distance_km")?.let { label("Расстояние: $it км", 14f, Color.LTGRAY) }
+            if (localOffer) OrderDelivery.value(order, "pickup_distance_km")?.let {
+                label("До подачи: $it км", 14f, Color.LTGRAY)
+            }
         }
         if (settings.optBoolean("show_price", true)) {
             OrderDelivery.value(order, "price")?.let { price ->
@@ -88,7 +109,11 @@ class OverlayManager private constructor(private val context: Context) {
                 label("Цена: нет в предложении", 16f, Color.LTGRAY)
         }
         OrderDelivery.value(order, "payment_method")?.let { payment ->
-            label("Оплата: ${when (payment) { "card" -> "безнал"; "cash" -> "наличные"; else -> payment }}", 14f, Color.LTGRAY)
+            label("Оплата: ${when (payment) {
+                "card" -> "карта"; "cashless" -> "безнал"; "cash" -> "наличные"
+                "corp", "corporate" -> "корпоративный"; "prepaid" -> "предоплата"
+                "internal" -> "внутренний"; "other" -> "другое"; else -> payment
+            }}", 14f, Color.LTGRAY)
         }
         if (localOffer && OrderDelivery.value(order, "payment_method") == null)
             label("Оплата: нет в предложении", 14f, Color.LTGRAY)
@@ -109,6 +134,8 @@ class OverlayManager private constructor(private val context: Context) {
     private fun scheduleAutoHide(order: JSONObject) {
         handler.removeCallbacksAndMessages(null)
         val settings = OverlayPreferences(context).settings
+        if (order.optString("source") == "yandex_notification" && actionStage in
+            setOf(YandexStage.ACCEPTED, YandexStage.WAITING, YandexStage.RIDING)) return
         if (!settings.optBoolean("auto_hide", true)) return
         val configured = settings.optInt("display_seconds", 15).coerceIn(5, 30)
         val incompleteLocal = order.optString("source") == "yandex_notification" &&
@@ -120,6 +147,7 @@ class OverlayManager private constructor(private val context: Context) {
 
     fun show(order: JSONObject) {
         hide()
+        actionStage = YandexStage.INCOMING
         val prefs = OverlayPreferences(context)
         val settings = prefs.settings
         val root = LinearLayout(context).apply {
@@ -134,15 +162,44 @@ class OverlayManager private constructor(private val context: Context) {
             elevation = dp(12).toFloat()
         }
         val header = TextView(context).apply {
-            text = if (order.optBoolean("is_test")) "ПРОВЕРКА ЭКРАНА · ПРИМЕР" else "●  ВХОДЯЩИЙ ЗАКАЗ"
+            text = when {
+                order.optBoolean("is_test") -> "ПРОВЕРКА ЭКРАНА · ПРИМЕР"
+                order.optString("data_kind") == "confirmed_order" -> "●  ЗАКАЗ ЯНДЕКС · ПОДТВЕРЖДЁН"
+                else -> "●  ВХОДЯЩЕЕ ПРЕДЛОЖЕНИЕ"
+            }
             textSize = 12f
             setTextColor(Color.rgb(216, 243, 106))
             setPadding(0, 0, 0, dp(12))
         }
         root.addView(header)
+        headerText = header
         val content = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
         root.addView(content)
         render(content, order, settings)
+        val localOffer = order.optString("source") == "yandex_notification" && !order.optBoolean("is_test")
+        if (localOffer) {
+            actionMessage = TextView(context).apply {
+                textSize = 14f
+                setTextColor(Color.WHITE)
+                visibility = View.GONE
+            }.also { root.addView(it) }
+            actionButton = Button(context).apply {
+                text = YandexActionPolicy.actionFor(YandexStage.INCOMING)!!.title
+                setOnClickListener {
+                    currentId?.let { id -> YandexAccessibilityService.requestAction(context, id) }
+                }
+            }.also { root.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(50))) }
+            openButton = Button(context).apply {
+                text = "Открыть Yandex Pro"
+                visibility = View.GONE
+                setOnClickListener {
+                    try { context.startActivity(OrderDelivery.openIntent(context, currentOrder ?: order)) }
+                    catch (e: Exception) {
+                        MonitorLog.write(context, "ERROR", "ACTION_CLICK_FAILED", "reason=open_yandex_failed error=${e.javaClass.simpleName}", currentId)
+                    }
+                }
+            }.also { root.addView(it, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(50))) }
+        }
         root.addView(Button(context).apply { text = "Закрыть"; setOnClickListener { hide() } },
             LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(50)))
         val width = minOf(dp(350), context.resources.displayMetrics.widthPixels - dp(24))
@@ -178,7 +235,37 @@ class OverlayManager private constructor(private val context: Context) {
         windows.addView(root, params)
         view = root
         body = content
+        currentOrder = order
         currentId = OrderDelivery.value(order, "order_id") ?: OrderDelivery.value(order, "event_id")
         scheduleAutoHide(order)
+    }
+
+    fun actionPending(id: String) {
+        if (currentId != id) return
+        handler.removeCallbacksAndMessages(null)
+        actionButton?.apply { text = "Подтверждаем..."; isEnabled = false }
+        actionMessage?.visibility = View.GONE
+    }
+
+    fun actionFailed(id: String) {
+        if (currentId != id) return
+        actionButton?.visibility = View.GONE
+        actionMessage?.apply { text = "Не удалось выполнить действие"; visibility = View.VISIBLE }
+        openButton?.visibility = View.VISIBLE
+    }
+
+    fun actionConfirmed(id: String, stage: YandexStage) {
+        if (currentId != id) return
+        actionStage = stage
+        headerText?.text = if (stage == YandexStage.COMPLETED) "●  ЗАКАЗ ЗАВЕРШЁН" else "●  ЗАКАЗ В РАБОТЕ"
+        actionMessage?.visibility = View.GONE
+        openButton?.visibility = View.GONE
+        val next = YandexActionPolicy.actionFor(stage)
+        actionButton?.apply {
+            visibility = if (next == null) View.GONE else View.VISIBLE
+            isEnabled = next != null
+            text = next?.title.orEmpty()
+        }
+        currentOrder?.let(::scheduleAutoHide)
     }
 }

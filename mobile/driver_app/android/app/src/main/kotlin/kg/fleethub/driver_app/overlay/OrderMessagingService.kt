@@ -33,6 +33,11 @@ class OrderMessagingService : FirebaseMessagingService() {
         try {
             val order = JSONObject(payload)
             if (order.optString("source").isBlank()) order.put("source", "fcm")
+            if (order.optString("source") == "fleet_api" && OrderDelivery.value(order, "order_id") != null &&
+                OrderDelivery.value(order, "status") != null) {
+                MonitorLog.write(this, "INFO", "FLEET_STATE_CONFIRMED",
+                    "status=${order.optString("status")} source=fleet_api", order.optString("event_id"), order.optString("order_id"))
+            }
             MonitorLog.write(this, "INFO", "FCM", "Order payload parsed source=${order.optString("source")}",
                 order.optString("event_id"), order.optString("order_id"))
             Handler(Looper.getMainLooper()).post {
@@ -184,7 +189,11 @@ object OrderDelivery {
                 value(order, "price")?.let { price -> listOfNotNull(price, value(order, "currency")).joinToString(" ") },
                 value(order, "pickup"), value(order, "destination"))
                 .joinToString(" · ").ifBlank { "Откройте приложение для деталей заказа" }
-            val title = if (order.optBoolean("is_test")) "ПРОВЕРКА ЭКРАНА · пример" else "Новый заказ"
+            val title = when {
+                order.optBoolean("is_test") -> "ПРОВЕРКА ЭКРАНА · пример"
+                order.optString("data_kind") == "confirmed_order" -> "Заказ Яндекс · подтверждён"
+                else -> "Новое предложение заказа"
+            }
             manager.notify(deliveryId.hashCode(), Notification.Builder(context, channelId)
                 .setSmallIcon(android.R.drawable.ic_menu_directions).setContentTitle(title)
                 .setContentText(body).setStyle(Notification.BigTextStyle().bigText(body))

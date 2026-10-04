@@ -43,7 +43,7 @@ class Order(Base, TimestampMixin):
     )
 
     price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
-    currency: Mapped[str | None] = mapped_column(String(16), nullable=True, default="RUB")
+    currency: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
     category: Mapped[str | None] = mapped_column(String(64), nullable=True)
     payment_method: Mapped[str | None] = mapped_column(String(64), nullable=True)

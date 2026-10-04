@@ -304,5 +304,6 @@ async def test_push_respects_settings_and_recipient(client):
     await watcher.tick()
     payload = sender.call_args.args[1]
     assert payload["driver_id"] == "a"
+    assert payload["data_kind"] == "confirmed_order"
     assert payload["sound"] is False
     assert payload["price"] is None

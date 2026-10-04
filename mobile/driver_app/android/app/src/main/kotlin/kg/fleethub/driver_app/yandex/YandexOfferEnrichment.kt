@@ -15,6 +15,7 @@ object YandexOfferEnrichment {
 
     fun begin(context: Context, order: JSONObject) {
         val id = OrderDelivery.value(order, "event_id") ?: return
+        if (OverlayManager.get(context).currentId == id) YandexActionController.start(context, id)
         val store = context.getSharedPreferences(STORE, Context.MODE_PRIVATE)
         if (store.getString("event_id", null) != id) {
             store.edit().putString("event_id", id).putString("order", order.toString())
@@ -71,6 +72,8 @@ object YandexOfferEnrichment {
 
     fun onSnapshot(context: Context, texts: List<String>, nodeCount: Int, rootAvailable: Boolean) {
         val (id, order) = pending(context) ?: return
+        if (YandexActionController.isTracking(id) &&
+            (!YandexActionController.isIncoming(id) || YandexActionController.isPending())) return
         if (!rootAvailable) {
             MonitorLog.write(context, "DEBUG", "ACCESSIBILITY_DATA", "root_unavailable reason=yandex_not_foreground", id)
             return
@@ -95,7 +98,9 @@ object YandexOfferEnrichment {
             "currency" to details.currency,
             "payment_method" to details.payment,
             "duration_minutes" to details.durationMinutes,
+            "distance_km" to details.distanceKm,
             "pickup_eta_minutes" to details.pickupEtaMinutes,
+            "pickup_distance_km" to details.pickupDistanceKm,
             "pickup" to details.pickup,
             "destination" to details.destination,
         )

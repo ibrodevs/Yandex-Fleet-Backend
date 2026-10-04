@@ -25,7 +25,7 @@ class YandexCardParserTest {
         assertEquals("40", card.durationMinutes)
         assertEquals("1564", card.price)
         assertEquals("RUB", card.currency)
-        assertEquals("card", card.payment)
+        assertEquals("cashless", card.payment)
         assertEquals("ул. Манаса, 45", card.pickup)
         assertEquals("проспект Чуй, 120", card.destination)
     }
@@ -111,10 +111,50 @@ class YandexCardParserTest {
         ))
         assertTrue(card.offerVisible)
         assertEquals("5", card.pickupEtaMinutes)
+        assertEquals("1.9", card.pickupDistanceKm)
+        assertNull(card.distanceKm)
         assertNull(card.durationMinutes)
         assertNull(card.price)
         assertNull(card.payment)
         assertEquals("улица Блюхера, 15, подъезд 2", card.pickup)
         assertEquals("улица Куйбышева, 21", card.destination)
+    }
+
+    @Test fun preservesPaymentVariantsWithoutCollapsingPrepaymentIntoCard() {
+        val methods = mapOf(
+            "Наличные" to "cash", "Карта" to "card", "Безнал" to "cashless",
+            "Корпоративный" to "corp", "Предоплата" to "prepaid",
+            "Внутренний" to "internal", "Другое" to "other",
+        )
+        for ((visible, expected) in methods) {
+            val card = YandexCardParser.parse(listOf("Новый заказ", "Оплата: $visible"))
+            assertEquals(visible, expected, card.payment)
+        }
+    }
+
+    @Test fun readsExplicitSomAndRublePricesButRejectsBonusBalanceAndCommission() {
+        val som = YandexCardParser.parse(listOf(
+            "Новый заказ", "Баланс 5 000 сом", "+130 ₽", "Комиссия 20 сом",
+            "Цена поездки: 1 564,50 сом", "Расстояние поездки: 12,4 км",
+        ))
+        assertEquals("1564.50", som.price)
+        assertEquals("KGS", som.currency)
+        assertEquals("12.4", som.distanceKm)
+        val rub = YandexCardParser.parse(listOf("Новый заказ", "Стоимость заказа 750 ₽"))
+        assertEquals("750", rub.price)
+        assertEquals("RUB", rub.currency)
+        val unknown = YandexCardParser.parse(listOf("Новый заказ", "+130 ₽", "Ваш доход 322 ₽"))
+        assertNull(unknown.price)
+        assertNull(unknown.currency)
+    }
+
+    @Test fun mapLabelAndPickupMetricDoNotBecomePaymentOrTripDuration() {
+        val card = YandexCardParser.parse(listOf(
+            "Новый заказ", "Время в пути", "3,9 км · 6 мин", "Средняя подача", "Карта",
+        ))
+        assertNull(card.durationMinutes)
+        assertNull(card.distanceKm)
+        assertNull(card.payment)
+        assertEquals("6", card.pickupEtaMinutes)
     }
 }

@@ -42,7 +42,11 @@
     if (value === null || value === undefined || value === "") return "—";
     const units = { KGS: "сом", RUB: "₽", USD: "$", EUR: "€" };
     const unit = units[currency] || currency || "";
-    return `${Math.round(Number(value))}${unit ? ` ${unit}` : ""}`;
+    const amount = Number(value);
+    const formatted = Number.isFinite(amount)
+      ? new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 4 }).format(amount)
+      : escapeHtml(value);
+    return `${formatted}${unit ? ` ${escapeHtml(unit)}` : ""}`;
   };
 
   function icon(name, className = "icon") {
@@ -72,15 +76,20 @@
   function paymentLabel(method) {
     if (method === "cash") return "Наличные";
     if (method === "card") return "Карта";
+    if (method === "cashless") return "Безнал";
     if (method === "corporate") return "Корпоративный";
+    if (method === "corp") return "Корпоративный";
+    if (method === "prepaid") return "Предоплата";
+    if (method === "internal") return "Внутренний";
+    if (method === "other") return "Другое";
     return "—";
   }
 
   function priceDetails(order) {
     return {
       value: order.price_is_estimated
-        ? `≈ ${money(order.price, order.currency || state.data?.summary?.currency)}`
-        : money(order.price, order.currency || state.data?.summary?.currency),
+        ? `≈ ${money(order.price, order.currency ?? null)}`
+        : money(order.price, order.currency ?? null),
       caption: order.price_is_estimated ? "Ориентировочная цена" : "Цена агрегатора",
     };
   }

@@ -93,7 +93,10 @@ def test_order_mapping_route_price_payment_status_and_timestamps():
     assert order["pickup_address"] == "Точка А"
     assert order["destination_address"] == "Точка Б"
     assert order["price"] == 450.5
-    assert order["payment_method"] == "card"
+    assert order["payment_method"] == "cashless"
+    assert order["payment_category"] == "cashless"
+    assert order["currency"] is None
+    assert order["data_kind"] == "confirmed_order"
     assert order["distance_km"] == 12.4
     assert order["duration_minutes"] == 30
     assert order["started_at"] == "2026-09-26T10:10:00+00:00"
@@ -106,6 +109,19 @@ def test_unknown_order_status_is_safe_and_missing_fields_remain_empty():
     assert order["status"] != "completed"
     assert order["price"] is None
     assert order["destination_address"] is None
+
+
+def test_yandex_order_preserves_original_payment_and_only_explicit_currency():
+    raw = order_fixture()
+    raw["payment_method"] = "prepaid"
+    raw["currency"] = "KGS"
+    mapped = map_yandex_order(raw)
+    assert mapped["payment_method"] == "prepaid"
+    assert mapped["payment_category"] == "prepaid"
+    assert mapped["currency"] == "KGS"
+
+    raw.pop("currency")
+    assert map_yandex_order(raw)["currency"] is None
 
 
 def test_driver_summary_only_uses_owned_known_data():

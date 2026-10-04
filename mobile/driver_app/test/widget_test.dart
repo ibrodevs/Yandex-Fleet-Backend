@@ -24,6 +24,18 @@ void main() {
     expect(FleetOrder({'status': 'completed'}).history, true);
   });
   test(
+    'order price never invents a currency and payment keeps Fleet variants',
+    () {
+      expect(FleetOrder({'price': 750}).price, '750');
+      expect(FleetOrder({'price': 750, 'currency': 'KGS'}).price, '750 сом');
+      expect(FleetOrder({'price': 750, 'currency': 'RUB'}).price, '750 ₽');
+      expect(FleetOrder({'payment_method': 'cashless'}).payment, 'Безнал');
+      expect(FleetOrder({'payment_method': 'card'}).payment, 'Карта');
+      expect(FleetOrder({'payment_method': 'prepaid'}).payment, 'Предоплата');
+      expect(FleetOrder({'payment_method': 'corp'}).payment, 'Корпоративная');
+    },
+  );
+  test(
     'notification parser accepts FCM string envelope, rejects invalid JSON',
     () {
       expect(

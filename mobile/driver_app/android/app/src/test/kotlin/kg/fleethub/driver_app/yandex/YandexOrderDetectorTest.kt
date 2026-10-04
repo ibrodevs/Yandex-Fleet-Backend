@@ -7,14 +7,21 @@ class YandexOrderDetectorTest {
     private fun payload(title: String, text: String = "") = YandexNotificationPayload(
         "ru.yandex.taximeter", "key", 123L, title, text, "", "", null)
 
-    @Test fun confirmsOfferWithPriceWithoutInventingAddress() {
+    @Test fun confirmsOfferWithoutTreatingBareAmountAsFare() {
         val result = YandexOrderDetector.detect(payload("Новый заказ", "350 ₽"))
         assertTrue(result.isOrder)
         assertEquals("high", result.confidence)
-        assertEquals("350", result.price)
-        assertEquals("₽", result.currency)
+        assertNull(result.price)
+        assertNull(result.currency)
         assertNull(result.pickup)
         assertNull(result.destination)
+    }
+
+    @Test fun readsExplicitNotificationFareAndCurrency() {
+        val result = YandexOrderDetector.detect(payload("Новый заказ", "Цена поездки: 350 сом"))
+        assertTrue(result.isOrder)
+        assertEquals("350", result.price)
+        assertEquals("KGS", result.currency)
     }
 
     @Test fun acceptsExactYandexOfferWithoutPriceOrAddress() {

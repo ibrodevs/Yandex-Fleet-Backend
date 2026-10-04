@@ -10,6 +10,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
 from app.config import get_settings
+from app.core.logging import log_event
 from app.mobile.firebase import FirebaseVerificationUnavailable, send_push, verify_phone_token
 from app.mobile.storage import database, settings_for
 from app.services.fleet import FleetProviderError, get_fleet_provider
@@ -229,7 +230,12 @@ def readonly(order):
 @router.get("/orders")
 async def orders(user=Depends(session)):
     items = await fleet_call("list_orders", driver_id=user["driver_id"])
-    return [readonly(o) for o in items if str(o.get("driver_id")) == user["driver_id"]]
+    owned = [readonly(o) for o in items if str(o.get("driver_id")) == user["driver_id"]]
+    for item in owned:
+        if item.get("id") and item.get("status") in {"assigned", "waiting", "in_progress", "completed"}:
+            log_event(log, "FLEET_STATE_CONFIRMED", order_id=str(item["id"]),
+                      status=item["status"], source="fleet_api")
+    return owned
 
 
 @router.get("/orders/{order_id}")

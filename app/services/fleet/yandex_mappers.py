@@ -39,12 +39,12 @@ CATEGORY_TITLES = {
 
 PAYMENT_METHOD_MAP = {
     "cash": "cash",
-    "cashless": "card",
+    "cashless": "cashless",
     "card": "card",
-    "internal": "other",
+    "internal": "internal",
     "other": "other",
     "corp": "corporate",
-    "prepaid": "card",
+    "prepaid": "prepaid",
 }
 
 
@@ -192,9 +192,11 @@ def map_yandex_order(raw: dict[str, Any]) -> dict[str, Any]:
         "category": category,
         "tariff": category,
         "tariff_title": CATEGORY_TITLES.get(category or "", category),
-        "payment_method": PAYMENT_METHOD_MAP.get(payment_method or "", payment_method),
+        "payment_method": payment_method,
+        "payment_category": PAYMENT_METHOD_MAP.get(payment_method or "", payment_method),
         "price": _number(raw.get("price")),
-        "currency": None,
+        "currency": str(raw.get("currency") or "").strip() or None,
+        "data_kind": "confirmed_order",
         "pickup": pickup,
         "pickup_address": pickup,
         "destination": destination,

@@ -7,12 +7,27 @@ import android.os.Looper
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import kg.fleethub.driver_app.overlay.OverlayManager
 import org.json.JSONObject
 
 class YandexAccessibilityService : AccessibilityService() {
     companion object {
         @Volatile private var instance: YandexAccessibilityService? = null
-        fun requestCapture() { instance?.scheduleCapture(100) }
+        fun requestCapture(delayMs: Long = 100) { instance?.scheduleCapture(delayMs) }
+        fun requestAction(context: android.content.Context, id: String) {
+            val service = instance
+            if (service == null) {
+                MonitorLog.write(context, "DEBUG", "ORDER_ACTION_REQUEST", "action=unknown", id)
+                MonitorLog.write(context, "WARN", "ACTION_CLICK_FAILED", "reason=accessibility_disconnected", id)
+                OverlayManager.get(context).actionFailed(id)
+                return
+            }
+            service.handler.post {
+                val root = runCatching { service.rootInActiveWindow }.getOrNull()
+                try { YandexActionController.request(service, id, root) }
+                finally { root?.let(service::recycle) }
+            }
+        }
     }
     private val handler = Handler(Looper.getMainLooper())
     private var pending = false
@@ -53,7 +68,8 @@ class YandexAccessibilityService : AccessibilityService() {
         val isYandex = runCatching { root?.packageName?.toString() == YandexDiagnostics.YANDEX_PRO_PACKAGE }.getOrDefault(false)
         val debug = YandexDiagnostics.recording && YandexDiagnostics.debugAvailable
         val enriching = YandexOfferEnrichment.hasPending(this)
-        val collect = debug || enriching
+        val tracking = YandexActionController.isTracking(OverlayManager.get(this).currentId)
+        val collect = debug || enriching || tracking
         fun walk(node: AccessibilityNodeInfo, depth: Int) {
             try {
                 if (count >= 500 || depth > 40 || SystemClock.uptimeMillis() - start > 80) { truncated = true; return }
@@ -63,7 +79,7 @@ class YandexAccessibilityService : AccessibilityService() {
                 if (!node.isVisibleToUser) return
                 val text = safeText(node.text)
                 val description = safeText(node.contentDescription)
-                if (enriching) {
+                if (enriching || tracking) {
                     text?.let { texts.add(it) }
                     if (description != text) description?.let { texts.add(it) }
                 }
@@ -88,7 +104,9 @@ class YandexAccessibilityService : AccessibilityService() {
         }
         try { if (root != null && isYandex && collect) walk(root, 0) }
         finally { root?.let { recycle(it) } }
+        if (tracking) YandexActionController.onSnapshot(this, texts, isYandex)
         if (enriching) YandexOfferEnrichment.onSnapshot(this, texts, count, isYandex)
+        if (YandexActionController.isPending()) scheduleCapture(700)
         YandexDiagnostics.record(mapOf(
             "time" to eventTime, "capturedAt" to System.currentTimeMillis(),
             "eventType" to AccessibilityEvent.eventTypeToString(eventType),

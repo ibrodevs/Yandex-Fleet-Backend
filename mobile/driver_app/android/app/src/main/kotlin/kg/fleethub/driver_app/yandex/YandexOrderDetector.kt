@@ -1,6 +1,5 @@
 package kg.fleethub.driver_app.yandex
 
-import java.util.Locale
 
 data class YandexNotificationPayload(
     val packageName: String, val key: String, val postedAt: Long,
@@ -23,7 +22,7 @@ object YandexOrderDetector {
     private val standaloneOffer = Regex("^\\s*(?:новый\\s+заказ|заказ\\s+для вас|new\\s+(?:ride|order))\\s*[.!]?\\s*$", RegexOption.IGNORE_CASE)
     private val trip = Regex("(?:поездка|до клиента|trip|ride)", RegexOption.IGNORE_CASE)
     private val negative = Regex("(?:заказ\\s+(?:отмен[её]н|заверш[её]н)|поездка\\s+завершен[ао]|истори[яи]\\s+заказов|баланс|выплат|новост|акци[яи]|смена\\s+завершена)", RegexOption.IGNORE_CASE)
-    private val pricePattern = Regex("(\\d[\\d\\s]{0,7})\\s*(₽|сом|KGS|RUB)", RegexOption.IGNORE_CASE)
+    private val amount = Regex("\\d[\\d\\s.,]{0,9}\\s*(?:₽|сом|KGS|RUB|⃀)", RegexOption.IGNORE_CASE)
     private val addressPattern = Regex("(?:ул\\.|улица|проспект|мкр|микрорайон|[А-Яа-яA-Za-z][А-Яа-яA-Za-z\\s.-]{2,}\\s+\\d+[А-Яа-яA-Za-z]?)", RegexOption.IGNORE_CASE)
     private val distance = Regex("\\d+(?:[.,]\\d+)?\\s*км", RegexOption.IGNORE_CASE)
     private val eta = Regex("\\d+\\s*мин", RegexOption.IGNORE_CASE)
@@ -34,13 +33,13 @@ object YandexOrderDetector {
             .filter { it.isNotBlank() }.distinct().joinToString("\n")
         if (negative.containsMatchIn(joined)) return OrderDetectionResult(false, "low")
         val exactOffer = fields.any { standaloneOffer.matches(it) }
-        val price = pricePattern.find(joined)
+        val card = YandexCardParser.parse(fields)
         val address = joined.lines().map { it.trim() }.firstOrNull {
             addressPattern.containsMatchIn(it) && !offer.containsMatchIn(it) &&
-                !pricePattern.containsMatchIn(it) && !negative.containsMatchIn(it) &&
+                !amount.containsMatchIn(it) && !negative.containsMatchIn(it) &&
                 !distance.containsMatchIn(it) && !eta.containsMatchIn(it)
         }
-        val details = listOf(price != null, address != null, distance.containsMatchIn(joined), eta.containsMatchIn(joined)).count { it }
+        val details = listOf(card.price != null, address != null, distance.containsMatchIn(joined), eta.containsMatchIn(joined)).count { it }
         val confidence = when {
             exactOffer -> "high"
             offer.containsMatchIn(joined) && details > 0 -> "high"
@@ -49,7 +48,6 @@ object YandexOrderDetector {
             else -> "low"
         }
         return OrderDetectionResult(confidence == "high", confidence,
-            price?.groupValues?.get(1)?.replace(" ", ""),
-            price?.groupValues?.get(2)?.uppercase(Locale.ROOT), address)
+            card.price, card.currency, address)
     }
 }

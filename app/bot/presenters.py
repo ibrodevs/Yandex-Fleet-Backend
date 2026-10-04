@@ -14,8 +14,13 @@ STATUS_TITLES = {
 
 PAYMENT_TITLES = {
     "card": "Карта",
+    "cashless": "Безнал",
     "cash": "Наличные",
     "corporate": "Корпоративный",
+    "corp": "Корпоративный",
+    "prepaid": "Предоплата",
+    "internal": "Внутренний",
+    "other": "Другое",
 }
 
 CATEGORY_TITLES = {

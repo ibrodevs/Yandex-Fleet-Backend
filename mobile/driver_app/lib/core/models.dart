@@ -14,13 +14,25 @@ class FleetOrder {
   String get pickup => value(data['pickup_address'] ?? data['pickup']);
   String get destination =>
       value(data['destination_address'] ?? data['destination']);
-  String get price => data['price'] == null
-      ? '—'
-      : '${value(data['price'])} ${data['currency'] == 'RUB' ? '₽' : value(data['currency'])}';
+  String get price {
+    if (data['price'] == null) return '—';
+    final currency = switch (data['currency']) {
+      'RUB' => '₽',
+      'KGS' => 'сом',
+      final String raw => raw,
+      _ => '',
+    };
+    return '${value(data['price'])} $currency'.trim();
+  }
+
   String get payment => switch (data['payment_method']) {
-    'card' => 'Безнал',
+    'card' => 'Карта',
+    'cashless' => 'Безнал',
     'cash' => 'Наличные',
     'corporate' => 'Корпоративная',
+    'corp' => 'Корпоративная',
+    'prepaid' => 'Предоплата',
+    'internal' => 'Внутренняя',
     _ => value(data['payment_method']),
   };
   String get statusTitle => value(

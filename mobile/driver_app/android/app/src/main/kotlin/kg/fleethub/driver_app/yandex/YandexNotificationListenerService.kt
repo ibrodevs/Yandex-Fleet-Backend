@@ -79,7 +79,8 @@ class YandexNotificationListenerService : NotificationListenerService() {
             }
             MonitorLog.write(this, "INFO", "ORDER_DETECTOR", "Order confirmed source=yandex_notification", id)
             val order = JSONObject().put("type", "new_order").put("event_type", "incoming_order")
-                .put("source", "yandex_notification").put("driver_id", driverId).put("order_id", "")
+                .put("source", "yandex_notification").put("data_kind", "incoming_offer")
+                .put("driver_id", driverId).put("order_id", "")
                 .put("event_id", id).put("price", result.price).put("currency", result.currency)
                 .put("pickup", result.pickup).put("destination", result.destination).put("tariff_title", JSONObject.NULL)
                 .put("detected_at", System.currentTimeMillis())
