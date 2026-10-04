@@ -157,4 +157,30 @@ class YandexCardParserTest {
         assertNull(card.payment)
         assertEquals("6", card.pickupEtaMinutes)
     }
+
+    @Test fun activeYandexOrderCorrectsProvisionalPaymentAndReadsExplicitEstimates() {
+        val offer = YandexCardParser.parse(listOf("Новый заказ", "2 км · 7 мин", "Средняя подача", "+130 ₽"))
+        assertNull(offer.price)
+        assertNull(offer.payment)
+        assertNull(offer.durationMinutes)
+
+        val active = YandexCardParser.parse(listOf(
+            "На месте", "Ориентировочная стоимость поездки", "750 ₽",
+            "До точки Б", "~28 мин", "Наличные", "Ваш доход 520 ₽",
+        ), activeOrder = true)
+        assertEquals("750", active.price)
+        assertEquals("RUB", active.currency)
+        assertTrue(active.priceEstimated)
+        assertEquals("28", active.durationMinutes)
+        assertEquals("cash", active.payment)
+    }
+
+    @Test fun activeScreenMustShowKnownOrderStageAndCardIsNotAStandalonePayment() {
+        val unrelated = YandexCardParser.parse(listOf("На линии", "Наличные", "Цена 750 ₽"), activeOrder = true)
+        assertFalse(unrelated.offerVisible)
+        val active = YandexCardParser.parse(listOf("Поехали", "Карта", "Ваш доход 322 ₽"), activeOrder = true)
+        assertTrue(active.offerVisible)
+        assertNull(active.payment)
+        assertNull(active.price)
+    }
 }

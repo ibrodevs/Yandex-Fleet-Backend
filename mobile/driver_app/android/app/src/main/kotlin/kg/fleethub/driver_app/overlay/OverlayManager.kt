@@ -15,11 +15,14 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import org.json.JSONObject
+import org.json.JSONArray
 import kg.fleethub.driver_app.yandex.YandexAccessibilityService
 import kg.fleethub.driver_app.yandex.YandexActionController
 import kg.fleethub.driver_app.yandex.YandexActionPolicy
 import kg.fleethub.driver_app.yandex.YandexStage
 import kg.fleethub.driver_app.yandex.MonitorLog
+import kg.fleethub.driver_app.yandex.CompletedRideSample
+import kg.fleethub.driver_app.yandex.YandexHistoryEstimate
 
 class OverlayManager private constructor(private val context: Context) {
     companion object {
@@ -84,9 +87,21 @@ class OverlayManager private constructor(private val context: Context) {
         return true
     }
 
+    fun refreshEstimates() { currentOrder?.let { update(it) } }
+
     private fun render(container: LinearLayout, order: JSONObject, settings: JSONObject) {
         container.removeAllViews()
         val localOffer = order.optString("source") == "yandex_notification"
+        val samples = if (localOffer) runCatching {
+            val array = JSONArray(OverlayPreferences(context).store.getString("estimate_history", "[]"))
+            (0 until array.length()).mapNotNull { index ->
+                val item = array.optJSONObject(index) ?: return@mapNotNull null
+                CompletedRideSample(item.optString("tariff"), item.optDouble("price", 0.0),
+                    item.optString("currency").takeIf { it.isNotBlank() && it != "null" },
+                    item.optInt("duration_minutes", 0).takeIf { it > 0 })
+            }
+        }.getOrDefault(emptyList()) else emptyList()
+        val tariff = OrderDelivery.value(order, "tariff_title")
         fun label(text: String, size: Float = 16f, color: Int = Color.WHITE) {
             container.addView(TextView(context).apply {
                 this.text = text
@@ -106,7 +121,11 @@ class OverlayManager private constructor(private val context: Context) {
             }
             val duration = OrderDelivery.value(order, "duration_minutes")
             if (duration != null) label(if (localOffer) "Время поездки: ~$duration мин" else "Время: ~$duration мин", 14f, Color.LTGRAY)
-            else if (localOffer) label("Время поездки: нет в предложении", 14f, Color.LTGRAY)
+            else if (localOffer) {
+                val estimate = YandexHistoryEstimate.duration(samples, tariff)
+                if (estimate != null) label("Время поездки по истории: ~${estimate.low}–${estimate.high} мин", 14f, Color.LTGRAY)
+                else label("Время поездки: Яндекс пока не указал", 14f, Color.LTGRAY)
+            }
             OrderDelivery.value(order, "distance_km")?.let { label("Расстояние: $it км", 14f, Color.LTGRAY) }
             if (localOffer) OrderDelivery.value(order, "pickup_distance_km")?.let {
                 label("До подачи: $it км", 14f, Color.LTGRAY)
@@ -119,10 +138,17 @@ class OverlayManager private constructor(private val context: Context) {
                     "KGS" -> "сом"
                     else -> OrderDelivery.value(order, "currency").orEmpty()
                 }
-                label("Цена: $price $currency".trim(), 23f)
+                val caption = if (order.optString("price_is_estimated") == "true") "Оценка Яндекса" else "Цена"
+                label("$caption: $price $currency".trim(), 23f)
             }
-            if (localOffer && OrderDelivery.value(order, "price") == null)
-                label("Цена: нет в предложении", 16f, Color.LTGRAY)
+            if (localOffer && OrderDelivery.value(order, "price") == null) {
+                val estimate = YandexHistoryEstimate.price(samples, tariff, OrderDelivery.value(order, "currency"))
+                if (estimate != null) {
+                    val unit = when (estimate.currency) { "RUB" -> "₽"; "KGS" -> "сом"; else -> estimate.currency.orEmpty() }
+                    val suffix = if (unit.isBlank()) " (валюта неизвестна)" else " $unit"
+                    label("Цена по истории: ~${estimate.low}–${estimate.high}$suffix", 16f, Color.LTGRAY)
+                } else label("Цена: Яндекс пока не указал", 16f, Color.LTGRAY)
+            }
         }
         OrderDelivery.value(order, "payment_method")?.let { payment ->
             label("Оплата: ${when (payment) {
@@ -132,8 +158,8 @@ class OverlayManager private constructor(private val context: Context) {
             }}", 14f, Color.LTGRAY)
         }
         if (localOffer && OrderDelivery.value(order, "payment_method") == null)
-            label("Оплата: нет в предложении", 14f, Color.LTGRAY)
-        if (settings.optBoolean("show_address", true)) {
+            label("Оплата: безнал (предположительно, проверяем)", 14f, Color.LTGRAY)
+        if (!localOffer && settings.optBoolean("show_address", true)) {
             val pickup = OrderDelivery.value(order, "pickup")
             if (pickup != null) label("Откуда: $pickup")
             else if (localOffer) label("Откуда: уточняется", 14f, Color.LTGRAY)

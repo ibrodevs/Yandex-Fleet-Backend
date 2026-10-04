@@ -66,7 +66,10 @@ class YandexNotificationListenerService : NotificationListenerService() {
                 "title=${payload.title.take(300)} text=${payload.text.take(300)} big_text=${payload.bigText.take(300)} sub_text=${payload.subText.take(300)} extras_keys=${extras.keySet().joinToString().take(300)}", id)
             MonitorLog.write(this, "INFO", "ORDER_DETECTOR", "is_order=${result.isOrder} confidence=${result.confidence} source=yandex_notification", id)
             if (!result.isOrder) {
-                if (YandexOfferTracker.isIdleStatus(payload)) YandexOfferEnrichment.clear(this)
+                if (YandexOfferTracker.shouldClearEnrichment(payload,
+                        YandexActionController.isTracking(id), YandexActionController.isIncoming(id))) {
+                    YandexOfferEnrichment.clear(this)
+                }
                 if (result.confidence == "medium") MonitorLog.write(this, "DEBUG", "ORDER_IGNORED", "reason=insufficient_order_evidence", id)
                 return
             }

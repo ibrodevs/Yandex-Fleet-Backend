@@ -64,8 +64,14 @@ class YandexOrderDetectorTest {
         assertTrue(second.showing)
     }
 
-    @Test fun onOrderNotificationClosesIncomingOfferEnrichment() {
+    @Test fun onOrderNotificationEndsOfferButAllowsLiveOrderEnrichment() {
         assertTrue(YandexOfferTracker.isIdleStatus(payload("Яндекс Про", "На заказе")))
+        assertTrue(YandexOfferTracker.isInProgressStatus(payload("Яндекс Про", "На заказе")))
+        assertFalse(YandexOfferTracker.isInProgressStatus(payload("Яндекс Про", "На линии")))
+        assertFalse(YandexOfferTracker.shouldClearEnrichment(payload("Яндекс Про", "На заказе"), true, true))
+        assertFalse(YandexOfferTracker.shouldClearEnrichment(payload("Яндекс Про", "Занят"), true, false))
+        assertTrue(YandexOfferTracker.shouldClearEnrichment(payload("Яндекс Про", "На линии"), true, true))
+        assertTrue(YandexOfferTracker.shouldClearEnrichment(payload("Заказ отменён"), true, false))
         assertFalse(YandexOrderDetector.detect(payload("Яндекс Про", "На заказе")).isOrder)
     }
 

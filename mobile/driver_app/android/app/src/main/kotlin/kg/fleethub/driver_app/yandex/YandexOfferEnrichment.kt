@@ -61,7 +61,10 @@ object YandexOfferEnrichment {
         val store = context.getSharedPreferences(STORE, Context.MODE_PRIVATE)
         val id = store.getString("event_id", null) ?: return null
         val age = System.currentTimeMillis() - store.getLong("started_at", 0)
-        if (age !in 0..WINDOW_MS) {
+        val activeOrder = OverlayManager.get(context).currentId == id &&
+            YandexActionController.stageFor(id) in setOf(
+                YandexStage.ACCEPTED, YandexStage.WAITING, YandexStage.RIDING)
+        if (age < 0 || (age > WINDOW_MS && !activeOrder)) {
             clear(context)
             return null
         }
@@ -72,13 +75,14 @@ object YandexOfferEnrichment {
 
     fun onSnapshot(context: Context, texts: List<String>, nodeCount: Int, rootAvailable: Boolean) {
         val (id, order) = pending(context) ?: return
-        if (YandexActionController.isTracking(id) &&
-            (!YandexActionController.isIncoming(id) || YandexActionController.isPending())) return
+        if (YandexActionController.isPending()) return
         if (!rootAvailable) {
             MonitorLog.write(context, "DEBUG", "ACCESSIBILITY_DATA", "root_unavailable reason=yandex_not_foreground", id)
             return
         }
-        val details = try { YandexCardParser.parse(texts) }
+        val activeOrder = YandexActionController.stageFor(id) in setOf(
+            YandexStage.ACCEPTED, YandexStage.WAITING, YandexStage.RIDING)
+        val details = try { YandexCardParser.parse(texts, activeOrder) }
         catch (e: Exception) {
             MonitorLog.write(context, "ERROR", "ACCESSIBILITY_DATA", "parse_failed error=${e.javaClass.simpleName}", id)
             return
@@ -96,6 +100,7 @@ object YandexOfferEnrichment {
             "order_type" to details.orderType,
             "price" to details.price,
             "currency" to details.currency,
+            "price_is_estimated" to details.price?.let { details.priceEstimated.toString() },
             "payment_method" to details.payment,
             "duration_minutes" to details.durationMinutes,
             "distance_km" to details.distanceKm,

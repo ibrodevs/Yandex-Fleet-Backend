@@ -7,6 +7,7 @@ data class YandexCardDetails(
     val orderType: String? = null,
     val price: String? = null,
     val currency: String? = null,
+    val priceEstimated: Boolean = false,
     val payment: String? = null,
     val durationMinutes: String? = null,
     val distanceKm: String? = null,
@@ -30,7 +31,7 @@ object YandexCardParser {
     private val offer = Regex("^(?:новый\\s+заказ|заказ\\s+для вас|new\\s+(?:ride|order))$", RegexOption.IGNORE_CASE)
     private val accept = Regex("^(?:принять(?:\\s+заказ)?|взять заказ|пропустить(?:\\s+приоритет\\s*-?\\d+)?|отклонить)$", RegexOption.IGNORE_CASE)
     private val price = Regex("(?<![\\d+\\-−])(\\d[\\d\\s\u00a0\u202f]{0,8}(?:[.,]\\d{1,2})?)\\s*(₽|руб\\.?|сом(?:ов)?|KGS|RUB|⃀)", RegexOption.IGNORE_CASE)
-    private val priceLabel = Regex("^(?:цена(?:\\s+(?:поездки|заказа))?|стоимость(?:\\s+(?:поездки|заказа))?|итого|к оплате|сумма заказа|пассажир заплатит)\\s*[:：-]?\\s*(.*)$", RegexOption.IGNORE_CASE)
+    private val priceLabel = Regex("^(?:цена(?:\\s+(?:поездки|заказа))?|стоимость(?:\\s+(?:поездки|заказа))?|ориентировочная\\s+(?:цена|стоимость)(?:\\s+поездки)?|примерная\\s+(?:цена|стоимость)(?:\\s+поездки)?|итого|к оплате|сумма заказа|пассажир заплатит)\\s*[:：-]?\\s*(.*)$", RegexOption.IGNORE_CASE)
     private val unrelatedMoney = Regex("(?:доход|заработ|комисс|бонус|скидк|баланс|парк|повышенн|доплат|выплат)", RegexOption.IGNORE_CASE)
     private val minutes = Regex("(?:~|≈)?\\s*(\\d{1,3})\\s*мин(?:ут[аы]?)?(?![\\p{L}\\p{N}])", RegexOption.IGNORE_CASE)
     private val pickupEta = Regex("(\\d+(?:[.,]\\d+)?)\\s*км\\s*[·•]\\s*(\\d{1,3})\\s*мин(?:ут[аы]?)?(?![\\p{L}\\p{N}])", RegexOption.IGNORE_CASE)
@@ -46,10 +47,11 @@ object YandexCardParser {
     private val tariffLabel = Regex("^тариф\\s*[:：-]?\\s*(.*)$", RegexOption.IGNORE_CASE)
     private val typeLabel = Regex("^тип\\s+(?:заказа|поездки)\\s*[:：-]?\\s*(.*)$", RegexOption.IGNORE_CASE)
     private val paymentLabel = Regex("^(?:(?:способ|тип)\\s+оплаты|оплата)\\s*[:：-]?\\s*(.*)$", RegexOption.IGNORE_CASE)
-    private val durationLabel = Regex("^(?:время\\s+(?:в пути|поездки)|в пути|длительность(?:\\s+поездки)?)\\s*[:：-]?\\s*(.*)$", RegexOption.IGNORE_CASE)
+    private val durationLabel = Regex("^(?:время\\s+(?:в пути|поездки)|в пути|длительность(?:\\s+поездки)?|до\\s+(?:конца\\s+поездки|точки\\s+б)|осталось\\s+ехать)\\s*[:：-]?\\s*(.*)$", RegexOption.IGNORE_CASE)
     private val unsuitableAddress = Regex("^(?:принять|отклонить|пропустить|новый заказ|₽|руб|сом|KGS|RUB|\\d+\\s*мин)", RegexOption.IGNORE_CASE)
 
-    fun parse(nodeTexts: List<String>): YandexCardDetails {
+    /** activeOrder is set only after the Yandex action controller confirmed this order's stage. */
+    fun parse(nodeTexts: List<String>, activeOrder: Boolean = false): YandexCardDetails {
         val texts = nodeTexts.asSequence().flatMap { it.split('\n').asSequence() }
             .map { it.trim().replace(Regex("\\s+"), " ") }.filter { it.isNotBlank() }
             // The map and the offer card can both contain A/B markers. Keep repeats:
@@ -106,7 +108,9 @@ object YandexCardParser {
                 ?: return@mapNotNull null
             pickup to destination
         }.lastOrNull()
-        val visible = texts.any { offer.matches(it) || accept.matches(it) } ||
+        val activeScreen = activeOrder && YandexActionPolicy.screenStage(texts) in
+            setOf(YandexStage.ACCEPTED, YandexStage.WAITING, YandexStage.RIDING)
+        val visible = activeScreen || texts.any { offer.matches(it) || accept.matches(it) } ||
             (routeLabeled && texts.any { price.containsMatchIn(it) }) ||
             (markerRoute != null && texts.any { tariffName.matches(it) } &&
                 texts.any { it.equals("средняя подача", true) })
@@ -117,7 +121,7 @@ object YandexCardParser {
         val priceMatch = texts.withIndex().firstNotNullOfOrNull { (index, text) ->
             if (unrelatedMoney.containsMatchIn(text)) return@firstNotNullOfOrNull null
             val label = priceLabel.matchEntire(text) ?: return@firstNotNullOfOrNull null
-            price.find(label.groupValues[1]) ?: run {
+            val amount = price.find(label.groupValues[1]) ?: run {
                 var found: MatchResult? = null
                 for (offset in 1..2) {
                     val next = texts.getOrNull(index + offset) ?: break
@@ -129,9 +133,13 @@ object YandexCardParser {
                 }
                 found
             }
+            amount?.let { it to (text.startsWith("ориентиров", true) || text.startsWith("примерн", true)) }
         }
-        val rawCurrency = priceMatch?.groupValues?.get(2)?.lowercase()
+        val rawCurrency = priceMatch?.first?.groupValues?.get(2)?.lowercase()
         val payment = labeled(paymentLabel, { paymentName.matches(it) })
+            ?: if (activeScreen) texts.filter {
+                paymentName.matches(it) && !it.equals("карта", true) && !it.equals("card", true)
+            }.distinct().singleOrNull() else null
         val duration = labeled(durationLabel,
             { minutes.containsMatchIn(it) && !pickupEta.containsMatchIn(it) },
             { minutes.containsMatchIn(it) && !pickupEta.containsMatchIn(it) &&
@@ -158,8 +166,9 @@ object YandexCardParser {
                 ?: texts.firstOrNull { tariffName.matches(it) },
             orderType = labeled(typeLabel, { it.isNotBlank() && it.length < 50 }, { typeName.matches(it) })
                 ?: texts.firstOrNull { typeName.matches(it) },
-            price = priceMatch?.groupValues?.get(1)?.replace(Regex("[\\s\u00a0\u202f]"), "")?.replace(',', '.'),
+            price = priceMatch?.first?.groupValues?.get(1)?.replace(Regex("[\\s\u00a0\u202f]"), "")?.replace(',', '.'),
             currency = when (rawCurrency) { "₽", "руб.", "руб", "rub" -> "RUB"; "сом", "сомов", "kgs", "⃀" -> "KGS"; else -> null },
+            priceEstimated = priceMatch?.second == true,
             payment = when (payment?.lowercase()) {
                 "картой", "карта", "card" -> "card"
                 "безналичный расчёт", "безналичный расчет", "безнал", "безналичные", "cashless" -> "cashless"

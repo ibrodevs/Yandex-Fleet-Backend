@@ -178,6 +178,31 @@ class AppState extends ChangeNotifier {
           orders = (value as List)
               .map((o) => FleetOrder(Map<String, dynamic>.from(o)))
               .toList();
+          if (Platform.isAndroid) {
+            final history = <Map<String, dynamic>>[];
+            for (final order in orders.where((item) => item.status == 'completed')) {
+              final price = num.tryParse(order.data['price']?.toString() ?? '');
+              if (price == null || price <= 0) continue;
+              final started = DateTime.tryParse(order.data['started_at']?.toString() ?? '');
+              final ended = DateTime.tryParse(order.data['ended_at']?.toString() ?? '');
+              final minutes = started != null && ended != null
+                  ? ended.difference(started).inMinutes
+                  : null;
+              history.add({
+                'tariff': order.tariff,
+                'price': price,
+                'currency': order.data['currency']?.toString(),
+                'duration_minutes': minutes != null && minutes > 0 && minutes <= 240
+                    ? minutes : null,
+              });
+              if (history.length >= 100) break;
+            }
+            try {
+              await overlayChannel.invokeMethod('setEstimateHistory', history);
+            } on Exception {
+              // A missing native estimator must never hide otherwise loaded orders.
+            }
+          }
           ordersLoadFailed = false;
           ordersStale = ordersFromCache;
         },

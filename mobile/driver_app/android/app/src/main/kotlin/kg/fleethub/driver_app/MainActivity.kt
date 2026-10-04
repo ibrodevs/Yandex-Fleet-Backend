@@ -27,11 +27,22 @@ class MainActivity: FlutterActivity() {
                     }
                     "setSession" -> {
                         val driverId = (call.arguments as? String)?.takeIf { it.isNotBlank() }
-                        prefs.store.edit().putString("driver_id", driverId).putBoolean("active", driverId != null).apply()
+                        val edit = prefs.store.edit().putString("driver_id", driverId)
+                            .putBoolean("active", driverId != null)
+                        if (prefs.store.getString("driver_id", null) != driverId) edit.remove("estimate_history")
+                        edit.apply()
                         result.success(null)
                     }
                     "setFcmRegistered" -> { prefs.store.edit().putBoolean("fcm_registered", call.arguments == true).apply(); result.success(null) }
                     "setSettings" -> { prefs.settings = JSONObject(call.arguments as Map<*, *>); prefs.active = !prefs.store.getString("driver_id", null).isNullOrBlank(); result.success(null) }
+                    "setEstimateHistory" -> {
+                        val samples = (call.arguments as? List<*>)?.take(100) ?: emptyList<Any>()
+                        if (!prefs.store.getString("driver_id", null).isNullOrBlank()) {
+                            prefs.store.edit().putString("estimate_history", org.json.JSONArray(samples).toString()).apply()
+                            OverlayManager.get(this).refreshEstimates()
+                        }
+                        result.success(null)
+                    }
                     "getDriverMode" -> result.success(OrderOverlayService.instance != null && prefs.driverMode)
                     "setDriverMode" -> {
                         val enabled = call.arguments == true

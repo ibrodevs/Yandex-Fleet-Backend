@@ -86,8 +86,8 @@ object YandexActionPolicy {
 /** Only the accessibility service supplies a live Yandex Pro root to this controller. */
 object YandexActionController {
     private const val CONFIRM_TIMEOUT_MS = 10_000L
-    private var eventId: String? = null
-    private var stage = YandexStage.INCOMING
+    @Volatile private var eventId: String? = null
+    @Volatile private var stage = YandexStage.INCOMING
     private var pending: YandexAction? = null
     private var pendingSince = 0L
     private var preferGesture = false
@@ -103,6 +103,7 @@ object YandexActionController {
 
     fun isTracking(id: String?): Boolean = id != null && eventId == id
     fun isIncoming(id: String): Boolean = eventId == id && stage == YandexStage.INCOMING
+    fun stageFor(id: String): YandexStage? = if (eventId == id) stage else null
     fun isPending(): Boolean = pending != null
     fun stop(id: String?) {
         if (id != null && eventId == id) {
