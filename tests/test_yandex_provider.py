@@ -195,6 +195,29 @@ async def test_fresh_park_snapshot_avoids_extra_driver_queries(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_mobile_reuses_worker_orders_during_stale_grace_without_extra_yandex_calls(tmp_path):
+    now = [100.0]
+    active = order_fixture("transporting")
+    completed = order_fixture("complete")
+    completed["id"] = "order-completed"
+    client = FakeYandexClient(orders=[active, completed])
+    cfg = settings(
+        tmp_path,
+        YANDEX_ORDERS_CACHE_TTL_SECONDS=10,
+        YANDEX_CACHE_STALE_SECONDS=60,
+    )
+    cache = SharedYandexCache(cfg.YANDEX_CACHE_DB_PATH, clock=lambda: now[0])
+    provider = YandexFleetProvider(client, settings=cfg, cache=cache)
+
+    await provider.list_orders()  # Worker refreshes the shared park snapshot.
+    now[0] += 11
+    orders = await provider.list_orders(driver_id="driver-1")
+
+    assert {order["status"] for order in orders} == {"in_progress", "completed"}
+    assert len(client.order_calls) == 1
+
+
+@pytest.mark.asyncio
 async def test_stale_park_profile_survives_temporary_exact_lookup_failure(tmp_path):
     now = [100.0]
 

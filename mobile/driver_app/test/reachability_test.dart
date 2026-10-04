@@ -159,6 +159,61 @@ void main() {
   });
 
   test(
+    'rate limited orders use saved active and completed data, then recover',
+    () async {
+      const savedOrders = [
+        {'id': 'ride', 'status': 'in_progress'},
+        {'id': 'done', 'status': 'completed'},
+      ];
+      await api.storage.write(
+        key: 'cache:/orders',
+        value: jsonEncode(savedOrders),
+      );
+      final refresh = state.refresh();
+      await requests.waitFor(5);
+      for (final entry in refreshData.entries.where(
+        (e) => e.key != '/orders',
+      )) {
+        requests.success(entry.key, entry.value);
+      }
+      requests.fail('/orders', status: 429);
+      await refresh;
+
+      expect(state.orders.map((o) => o.id), ['ride', 'done']);
+      expect(state.orders.first.active, isTrue);
+      expect(state.orders.last.history, isTrue);
+      expect(state.ordersStale, isTrue);
+      expect(state.ordersLoadFailed, isFalse);
+
+      final next = state.refresh();
+      await requests.waitFor(10);
+      for (final entry in refreshData.entries) {
+        requests.success(
+          entry.key,
+          entry.key == '/orders' ? savedOrders : entry.value,
+        );
+      }
+      await next;
+      expect(state.ordersStale, isFalse);
+    },
+  );
+
+  test('uncached failed orders are reported as unavailable', () async {
+    await api.storage.delete(key: 'cache:/orders');
+    final refresh = state.refresh();
+    await requests.waitFor(5);
+    for (final entry in refreshData.entries.where((e) => e.key != '/orders')) {
+      requests.success(entry.key, entry.value);
+    }
+    requests.fail('/orders', status: 429);
+    await refresh;
+
+    expect(state.orders, isEmpty);
+    expect(state.ordersLoadFailed, isTrue);
+    expect(state.error, contains('Слишком много запросов'));
+  });
+
+  test(
     'partial transport failure is reported accurately and retried',
     () async {
       state.dispose();

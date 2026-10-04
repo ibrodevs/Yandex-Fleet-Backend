@@ -25,6 +25,8 @@ class AppState extends ChangeNotifier {
   String? error;
   Map<String, dynamic> driver = {}, summary = {}, vehicle = {};
   List<FleetOrder> orders = [];
+  bool ordersLoadFailed = false;
+  bool ordersStale = false;
   OverlaySettings settings = OverlaySettings();
   final List<StreamSubscription<dynamic>> _subscriptions = [];
   void Function(String)? openOrder;
@@ -131,13 +133,16 @@ class AppState extends ChangeNotifier {
 
     Object? firstError;
     var loaded = 0;
+    var ordersFromCache = false;
 
     Future<void> load(
       String path,
-      Future<void> Function(dynamic value) apply,
-    ) async {
+      Future<void> Function(dynamic value) apply, {
+      void Function()? onCache,
+      void Function()? onError,
+    }) async {
       try {
-        final value = await api.get(path);
+        final value = await api.get(path, onCache: onCache);
 
         if (!signedIn) return;
 
@@ -145,6 +150,7 @@ class AppState extends ChangeNotifier {
         loaded++;
         notifyListeners();
       } catch (e) {
+        onError?.call();
         firstError ??= e;
       }
     }
@@ -166,11 +172,22 @@ class AppState extends ChangeNotifier {
       load('/vehicle', (value) async {
         vehicle = Map<String, dynamic>.from(value ?? {});
       }),
-      load('/orders', (value) async {
-        orders = (value as List)
-            .map((o) => FleetOrder(Map<String, dynamic>.from(o)))
-            .toList();
-      }),
+      load(
+        '/orders',
+        (value) async {
+          orders = (value as List)
+              .map((o) => FleetOrder(Map<String, dynamic>.from(o)))
+              .toList();
+          ordersLoadFailed = false;
+          ordersStale = ordersFromCache;
+        },
+        onCache: () {
+          ordersFromCache = true;
+        },
+        onError: () {
+          ordersLoadFailed = true;
+        },
+      ),
       load('/settings', (value) async {
         settings = OverlaySettings(Map<String, dynamic>.from(value));
 
@@ -308,6 +325,8 @@ class AppState extends ChangeNotifier {
     }
     driver = {};
     orders = [];
+    ordersLoadFailed = false;
+    ordersStale = false;
     vehicle = {};
     summary = {};
     driverMode = false;

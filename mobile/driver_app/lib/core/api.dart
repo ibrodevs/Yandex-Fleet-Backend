@@ -161,7 +161,7 @@ class FleetApi extends ChangeNotifier {
     token = accessToken;
   }
 
-  Future<dynamic> get(String path) async {
+  Future<dynamic> get(String path, {void Function()? onCache}) async {
     try {
       Future<Response<dynamic>> fetch() =>
           _request('GET', path, () => _dio.get(path));
@@ -181,10 +181,14 @@ class FleetApi extends ChangeNotifier {
       await storage.write(key: 'cache:$path', value: jsonEncode(response.data));
       return response.data;
     } on DioException catch (e) {
-      if (_isTransportFailure(e)) {
+      final recoverableServerError =
+          path == '/orders' &&
+          {429, 500, 502, 503, 504}.contains(e.response?.statusCode);
+      if (_isTransportFailure(e) || recoverableServerError) {
         final cached = await storage.read(key: 'cache:$path');
         if (cached != null) {
           _trace('GET $path -> cache');
+          onCache?.call();
           return jsonDecode(cached);
         }
       }

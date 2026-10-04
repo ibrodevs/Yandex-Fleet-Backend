@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -302,8 +303,22 @@ class Dashboard extends StatefulWidget {
 
 class _DashboardState extends State<Dashboard> with WidgetsBindingObserver {
   int tab = 0;
-  bool history = false;
+  int orderFilter = 0;
+  Timer? _ordersRefreshTimer;
   AppState get s => widget.state;
+
+  void _watchOrders(bool enabled) {
+    if (!enabled) {
+      _ordersRefreshTimer?.cancel();
+      _ordersRefreshTimer = null;
+      return;
+    }
+    _ordersRefreshTimer ??= Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => unawaited(s.refresh()),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -312,6 +327,7 @@ class _DashboardState extends State<Dashboard> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _watchOrders(false);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -320,6 +336,9 @@ class _DashboardState extends State<Dashboard> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       s.refresh();
+      _watchOrders(tab == 1);
+    } else {
+      _watchOrders(false);
     }
   }
 
@@ -359,7 +378,11 @@ class _DashboardState extends State<Dashboard> with WidgetsBindingObserver {
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: tab,
-        onDestinationSelected: (v) => setState(() => tab = v),
+        onDestinationSelected: (v) {
+          setState(() => tab = v);
+          _watchOrders(v == 1);
+          if (v == 1) unawaited(s.refresh());
+        },
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.grid_view_rounded),
@@ -494,8 +517,14 @@ class _DashboardState extends State<Dashboard> with WidgetsBindingObserver {
     const SizedBox(height: 16),
     if (s.orders.where((o) => o.active).isEmpty)
       empty(
-        'Сейчас активных заказов нет',
-        'Новые заказы появятся после передачи данных из Яндекс Fleet.',
+        s.ordersLoadFailed
+            ? 'Не удалось загрузить заказы'
+            : 'Сейчас активных заказов нет',
+        s.ordersLoadFailed
+            ? 'Потяните вниз, чтобы повторить загрузку.'
+            : s.ordersStale
+            ? 'Показаны сохранённые данные. Потяните вниз, чтобы обновить.'
+            : 'Новые заказы появятся после передачи данных из Яндекс Fleet.',
       )
     else
       ...s.orders.where((o) => o.active).map((o) => OrderCard(order: o)),
@@ -506,21 +535,52 @@ class _DashboardState extends State<Dashboard> with WidgetsBindingObserver {
   ];
   List<Widget> orderList() {
     final items = s.orders
-        .where((o) => history ? o.history : o.active)
+        .where(
+          (o) => switch (orderFilter) {
+            0 => o.active,
+            1 => o.status == 'completed',
+            _ => o.status == 'cancelled',
+          },
+        )
         .toList();
     return [
       title('Ваши заказы'),
-      SegmentedButton<bool>(
+      if (s.ordersStale || s.ordersLoadFailed)
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.sync_problem_outlined),
+            title: Text(
+              s.ordersLoadFailed
+                  ? 'Не удалось обновить заказы'
+                  : 'Показаны сохранённые заказы',
+            ),
+            subtitle: const Text('Данные могут отставать от Яндекс Про.'),
+            trailing: IconButton(
+              onPressed: s.refresh,
+              icon: const Icon(Icons.refresh),
+            ),
+          ),
+        ),
+      SegmentedButton<int>(
+        showSelectedIcon: false,
         segments: const [
-          ButtonSegment(value: false, label: Text('Активные')),
-          ButtonSegment(value: true, label: Text('История')),
+          ButtonSegment(value: 0, label: Text('Активные')),
+          ButtonSegment(value: 1, label: Text('Завершены')),
+          ButtonSegment(value: 2, label: Text('Отменены')),
         ],
-        selected: {history},
-        onSelectionChanged: (v) => setState(() => history = v.first),
+        selected: {orderFilter},
+        onSelectionChanged: (v) => setState(() => orderFilter = v.first),
       ),
       const SizedBox(height: 22),
       if (items.isEmpty)
-        empty('Заказов пока нет', 'Потяните вниз, чтобы обновить данные.')
+        empty(
+          s.ordersLoadFailed && s.orders.isEmpty
+              ? 'Не удалось загрузить заказы'
+              : 'Заказов пока нет',
+          s.ordersLoadFailed || s.ordersStale
+              ? 'Потяните вниз, чтобы повторить загрузку.'
+              : 'Потяните вниз, чтобы обновить данные.',
+        )
       else
         ...items.map((o) => OrderCard(order: o)),
     ];

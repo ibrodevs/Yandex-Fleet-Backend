@@ -127,13 +127,19 @@ class YandexFleetProvider(FleetProvider):
         )
 
     async def _driver_orders_snapshot(self, driver_id: str) -> list[dict[str, Any]]:
-        # The worker may already have a fresh park snapshot. Otherwise query
-        # only this driver's orders so a mobile refresh does not paginate the
-        # entire park while the phone waits for a response.
+        # The worker polls park orders for push delivery. Reuse its snapshot
+        # during the short stale grace period as well, so mobile refreshes do
+        # not issue another request for every driver while Yandex returns 429.
         park_entry = await self.cache.get("orders:park:default")
+        driver_entry = await self.cache.get(f"orders:driver:{driver_id}")
         park_age = (
             max(0.0, self.cache.clock() - park_entry.updated_at)
             if park_entry and isinstance(park_entry.payload, list)
+            else None
+        )
+        driver_age = (
+            max(0.0, self.cache.clock() - driver_entry.updated_at)
+            if driver_entry and isinstance(driver_entry.payload, list)
             else None
         )
 
@@ -145,7 +151,15 @@ class YandexFleetProvider(FleetProvider):
                 if str((order.get("driver_profile") or {}).get("id")) == driver_id
             ]
 
-        if park_age is not None and park_age <= self.settings.YANDEX_ORDERS_CACHE_TTL_SECONDS:
+        usable_age = (
+            self.settings.YANDEX_ORDERS_CACHE_TTL_SECONDS
+            + self.settings.YANDEX_CACHE_STALE_SECONDS
+        )
+        if driver_age is not None and driver_age <= usable_age and (
+            park_age is None or park_age > usable_age or driver_age < park_age
+        ):
+            return driver_entry.payload
+        if park_age is not None and park_age <= usable_age:
             return park_driver_orders()
 
         async def refresh() -> list[dict[str, Any]]:

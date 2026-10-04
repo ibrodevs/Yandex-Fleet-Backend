@@ -223,7 +223,7 @@ async def test_expired_session(client):
     assert (await c.get("/api/v1/mobile/orders")).status_code == 401
 
 
-async def test_mobile_orders_serves_bounded_stale_snapshot_on_yandex_429(
+async def test_mobile_orders_reuses_bounded_worker_snapshot_before_retrying_yandex(
     client, tmp_path, monkeypatch
 ):
     c, _ = client
@@ -265,6 +265,11 @@ async def test_mobile_orders_serves_bounded_stale_snapshot_on_yandex_429(
 
     assert response.status_code == 200
     assert [item["id"] for item in response.json()] == ["order-1"]
+    assert yandex_client.calls == 1
+
+    now[0] += 60
+    expired = await c.get("/api/v1/mobile/orders")
+    assert expired.status_code == 503
     assert yandex_client.calls == 2
 
 
