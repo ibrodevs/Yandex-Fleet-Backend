@@ -64,6 +64,11 @@ class YandexOrderDetectorTest {
         assertTrue(second.showing)
     }
 
+    @Test fun onOrderNotificationClosesIncomingOfferEnrichment() {
+        assertTrue(YandexOfferTracker.isIdleStatus(payload("Яндекс Про", "На заказе")))
+        assertFalse(YandexOrderDetector.detect(payload("Яндекс Про", "На заказе")).isOrder)
+    }
+
     @Test fun repeatedOfferWithoutStatusIsNotRedisplayed() {
         val first = YandexOfferTracker.transition(YandexOfferState(), true, false, 1_000L)
         val repeat = YandexOfferTracker.transition(first, true, false, 20_000L)

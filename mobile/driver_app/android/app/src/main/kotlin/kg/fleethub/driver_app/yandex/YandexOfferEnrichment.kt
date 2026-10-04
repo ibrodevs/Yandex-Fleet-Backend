@@ -84,7 +84,7 @@ object YandexOfferEnrichment {
             return
         }
         val now = System.currentTimeMillis()
-        if (now - lastSnapshotLogAt > 1_000) {
+        if (now - lastSnapshotLogAt > 5_000) {
             MonitorLog.write(context, "DEBUG", "ACCESSIBILITY_DATA",
                 "nodes=$nodeCount text_nodes=${texts.size} offer_visible=${details.offerVisible}", id)
             lastSnapshotLogAt = now
@@ -111,7 +111,7 @@ object YandexOfferEnrichment {
                 changed = true
             }
         }
-        if (changed || now - lastParseLogAt > 1_000) {
+        if (changed || now - lastParseLogAt > 10_000) {
             val missing = listOfNotNull(
                 if (details.price == null) "price" else null,
                 if (details.payment == null) "payment" else null,

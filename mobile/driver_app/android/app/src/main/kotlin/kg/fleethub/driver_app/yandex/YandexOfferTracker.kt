@@ -12,7 +12,7 @@ data class YandexOfferState(
 object YandexOfferTracker {
     private const val MAX_OFFER_AGE_MS = 120_000L
     private val idleStatus = Regex(
-        "^\\s*(?:на линии|занят|заказ\\s+(?:отмен[её]н|принят|заверш[её]н)|поездка\\s+завершен[ао])\\s*[.!]?\\s*$",
+        "^\\s*(?:на линии|на заказе|занят|заказ\\s+(?:отмен[её]н|принят|заверш[её]н)|поездка\\s+завершен[ао])\\s*[.!]?\\s*$",
         RegexOption.IGNORE_CASE,
     )
 

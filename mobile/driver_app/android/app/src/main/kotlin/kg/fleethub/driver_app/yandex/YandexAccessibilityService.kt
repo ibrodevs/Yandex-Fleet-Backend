@@ -1,7 +1,9 @@
 package kg.fleethub.driver_app.yandex
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.GestureDescription
 import android.graphics.Rect
+import android.graphics.Path
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -56,6 +58,32 @@ class YandexAccessibilityService : AccessibilityService() {
     private fun scheduleCapture(delayMs: Long) {
         // A bounded trailing sample: continuous animations cannot postpone capture forever.
         if (!pending) { pending = true; handler.postDelayed(capture, delayMs) }
+    }
+
+    /** Canvas-based Yandex controls can expose their label without ACTION_CLICK. */
+    fun tapYandexLabel(x: Int, y: Int, result: (Boolean) -> Unit): Boolean =
+        dispatchYandexGesture(x, y, x, 75, result)
+
+    fun swipeYandexSlider(fromX: Int, toX: Int, y: Int, result: (Boolean) -> Unit): Boolean =
+        dispatchYandexGesture(fromX, y, toX, 480, result)
+
+    private fun dispatchYandexGesture(fromX: Int, y: Int, toX: Int, durationMs: Long,
+                                      result: (Boolean) -> Unit): Boolean {
+        if (rootInActiveWindow?.let { root ->
+                try { root.packageName?.toString() == YandexDiagnostics.YANDEX_PRO_PACKAGE }
+                finally { recycle(root) }
+            } != true) return false
+        val path = Path().apply {
+            moveTo(fromX.toFloat(), y.toFloat())
+            if (fromX != toX) lineTo(toX.toFloat(), y.toFloat())
+        }
+        val gesture = GestureDescription.Builder()
+            .addStroke(GestureDescription.StrokeDescription(path, 0, durationMs))
+            .build()
+        return dispatchGesture(gesture, object : GestureResultCallback() {
+            override fun onCompleted(gestureDescription: GestureDescription?) { result(true) }
+            override fun onCancelled(gestureDescription: GestureDescription?) { result(false) }
+        }, handler)
     }
 
     private fun snapshot() {

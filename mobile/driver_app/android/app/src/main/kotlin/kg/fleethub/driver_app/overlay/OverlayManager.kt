@@ -41,6 +41,22 @@ class OverlayManager private constructor(private val context: Context) {
     var currentId: String? = null
         private set
 
+    fun coversPoint(x: Int, y: Int): Boolean {
+        val overlay = view ?: return false
+        val location = IntArray(2)
+        overlay.getLocationOnScreen(location)
+        return x in location[0] until location[0] + overlay.width &&
+            y in location[1] until location[1] + overlay.height
+    }
+
+    fun coversHorizontalSegment(fromX: Int, toX: Int, y: Int): Boolean {
+        val overlay = view ?: return false
+        val location = IntArray(2)
+        overlay.getLocationOnScreen(location)
+        return y in location[1] until location[1] + overlay.height &&
+            maxOf(fromX, toX) >= location[0] && minOf(fromX, toX) < location[0] + overlay.width
+    }
+
     private fun dp(value: Int) = (value * context.resources.displayMetrics.density).toInt()
 
     fun hide() {
@@ -249,9 +265,14 @@ class OverlayManager private constructor(private val context: Context) {
 
     fun actionFailed(id: String) {
         if (currentId != id) return
-        actionButton?.visibility = View.GONE
+        actionButton?.apply {
+            visibility = View.VISIBLE
+            isEnabled = true
+            text = YandexActionPolicy.actionFor(actionStage)?.let { "Повторить: ${it.title}" } ?: "Повторить"
+        }
         actionMessage?.apply { text = "Не удалось выполнить действие"; visibility = View.VISIBLE }
         openButton?.visibility = View.VISIBLE
+        currentOrder?.let(::scheduleAutoHide)
     }
 
     fun actionConfirmed(id: String, stage: YandexStage) {

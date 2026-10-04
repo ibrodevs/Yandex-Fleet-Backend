@@ -25,6 +25,8 @@ class YandexActionControllerTest {
         assertFalse(YandexActionPolicy.matches(YandexAction.ACCEPT, "Принять условия"))
         assertFalse(YandexActionPolicy.matches(YandexAction.FINISH, "Завершить смену"))
         assertFalse(YandexActionPolicy.confirmsNext(YandexStage.INCOMING, YandexStage.RIDING))
+        assertTrue(YandexActionPolicy.matches(YandexAction.ACCEPT, "+130 ₽\nПринять"))
+        assertEquals(YandexStage.INCOMING, YandexActionPolicy.screenStage(listOf("+130 ₽\nПринять")))
     }
 
     @Test fun actionTargetMustBelongToYandexAndBeVisibleEnabledAndClickable() {
@@ -35,5 +37,24 @@ class YandexActionControllerTest {
         assertFalse(YandexActionPolicy.usableTarget("ru.yandex.taximeter", true, true, false, true, true))
         assertFalse(YandexActionPolicy.usableTarget("ru.yandex.taximeter", true, true, true, false, true))
         assertFalse(YandexActionPolicy.usableTarget("ru.yandex.taximeter", true, true, true, true, false))
+    }
+
+    @Test fun canvasGestureRequiresSmallVisibleLabelInsideYandexWindow() {
+        assertTrue(YandexActionPolicy.usableGestureLabel(400, 1500, 500, 1540, 0, 24, 1080, 2200))
+        assertFalse(YandexActionPolicy.usableGestureLabel(400, 1500, 500, 1540, 0, 24, 350, 2200))
+        assertFalse(YandexActionPolicy.usableGestureLabel(0, 200, 1080, 1800, 0, 24, 1080, 2200))
+        assertTrue(YandexActionPolicy.usableClickBounds(350, 1440, 800, 1580, 450, 1520, 2200))
+        assertFalse(YandexActionPolicy.usableClickBounds(0, 24, 1080, 2200, 450, 1520, 2200))
+    }
+
+    @Test fun rideStartSwipeRequiresAVisibleBottomSliderAnchoredByTheExactLabel() {
+        assertTrue(YandexActionPolicy.usableSliderBounds(
+            80, 1900, 1000, 2050, 300, 1970, 0, 24, 1080, 2200))
+        assertFalse(YandexActionPolicy.usableSliderBounds(
+            80, 200, 1000, 350, 300, 270, 0, 24, 1080, 2200))
+        assertFalse(YandexActionPolicy.usableSliderBounds(
+            80, 1900, 1000, 2050, 1050, 1970, 0, 24, 1080, 2200))
+        assertFalse(YandexActionPolicy.usableSliderBounds(
+            80, 1600, 1000, 2100, 300, 1900, 0, 24, 1080, 2200))
     }
 }
